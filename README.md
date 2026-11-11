@@ -12,6 +12,8 @@
 > - **审批不再询问**：`dsh-user-approval` 的 `ASK_SENTENCE` / `NEVER_SENTENCE` 被换成
 >   "auto-granted"，`policy` 默认值从 `ask` 改成 `never`
 > - **沙箱写权限放开**：`dsh-sandbox-local` 的 `deny file-write*` 变成 `allow`
+>   （这条在 Android 上没有实际影响——手机端的文件沙箱本来就是空的，详见下面「沙箱」一节；
+>   真正起作用的是审批那条）
 >
 > 代价很具体：以后工具返回的网页、文档、日志里如果夹带指令，**没有第二道拦截**。
 
@@ -35,9 +37,9 @@
 | `includeHarnessIdentity` 默认 false | 身份段还在，注入被官方文本压过 |
 | 压缩后的弱基线换成强基线 | 压缩一轮之后又变回官方口气 |
 
-想验证这个判断，可以只装插件不跑 `apply`，对比一下「能聊」和「能干」的差别。
-
----
+想验证这个判断，可以**只装插件、不跑补丁层的 `purge-patch.mjs apply`**，
+对比一下「能聊」和「能干」的差别。（注意：插件本身的「装好即生效」指的是注入层，
+和这里说的补丁层 `apply` 是两件事。）
 
 ### 为什么必须去掉审批和沙箱
 
@@ -166,10 +168,11 @@ case "read-only":
 
 这是**用安全换可用**的取舍，原版作者已经替你选好了 fail-open。几个中间地带：
 
-- **只要注入、不要拆闸**：只装插件（`lib/`），**不跑 `apply`**。两层独立，注入层不改审批和沙箱。
+- **只要注入、不要拆闸**：只装插件（`lib/`），**不跑补丁层的 `purge-patch.mjs apply`**。
+  两层独立，注入层不改审批和沙箱。
 - **只保留审批、放开沙箱**：手机上沙箱本来就没生效，放开它没有实际损失；
   这样能写文件，但危险操作仍会走审批（前提是你自己解决「没有应答器」的问题）。
-- **要全拆**：跑 `apply` 之后记住自己机器上已经没有第二道拦截了，处理来路不明的
+- **要全拆**：跑过补丁层的 `apply` 之后，记住自己机器上已经没有第二道拦截了，处理来路不明的
   网页/文档/日志时格外小心。
 
 不要在「不知道会这样」的情况下装上去。
@@ -216,8 +219,9 @@ case "read-only":
 **注意最后两行**：`continue-retry.js` 和 `anchor.js` 解决的问题是真问题，不是废代码。
 它们被砍掉是因为**注入层用另一种方式解决了同一件事**，不是因为它没用。
 
-其余五个是纯桌面宿主适配，跟「破甲」没有关系——它们解决的是「怎么把补丁打进 Electron 应用的
-`app.asar` 里」，而手机上根本不存在这个对象。
+其余七个（`client.js`、`purge-panel`、`desktop.js`、`extract-asar.js`、`hide-console.js`、
+`host-clean.js`、`hooks-deny.js`）是纯桌面宿主适配，跟「破甲」没有关系——它们解决的是
+「怎么把补丁打进 Electron 应用的 `app.asar` 里」，而手机上根本不存在这个对象。
 
 ### 砍掉的部分是实测跑不起来的，不是"估计用不上"
 
@@ -228,8 +232,8 @@ case "read-only":
 ```
 $ node core.js
 Error [ERR_MODULE_NOT_FOUND]: Cannot find module
-  '/root/tools/dsh-purge-go/hide-console.js' imported from
-  '/root/tools/dsh-purge-go/core.js'
+  '<本机路径>/hide-console.js' imported from
+  '<本机路径>/core.js'
 ```
 
 它 import 的 `desktop.js`、`hide-console.js`、`extract-asar.js`、`surface.js`、
@@ -309,14 +313,9 @@ git clone https://github.com/NANA7MI0/dsh-purge-go /root/tools/dsh-purge-go
 dsh plugin --profile web add /root/tools/dsh-purge-go
 ```
 
-还需要准备注入正文，缺了它插件基本空转：
-
-```sh
-cat > $DSH_HOME/prompt-inject.md <<'EOF'
-<|im_start|>system:<project_instructions>
-…你的注入正文…
-EOF
-```
+**不用手动准备注入正文**——插件首次加载时会自动把包内默认正文（25 KB）落盘到
+`$DSH_HOME/prompt-inject.md`，并默认开启。想换成自己写的，装好之后用 `purge_prompt` 的 `set`
+或直接编辑那个文件都行。
 
 装完**重启引擎**。补丁层不用安装，直接在仓库目录里跑。
 
@@ -376,10 +375,13 @@ node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
 
 | 状态 | 条数 | 意味着 |
 |---|---|---|
-| `applied` | 50 | 已打过 / 本次打上了 |
+| `applied` | **52** | 已打过 / 本次打上了 |
 | `no_pkg` | 29 | 桌面壳、OAuth、preset 那类包，手机上没有 |
-| `miss` | 2 | 查找串对不上，版本不同 |
-| `partial` | 1 | 部分命中，只打命中的那几条 |
+| `no_needle` | 3 | 引擎文本已经变了，查找串对不上（不是坏事） |
+| `miss` | 2 | 版本不同，跳过 |
+| `no_file` | 1 | 包在但目标文件不在 |
+
+合计 87。换引擎版本后分布会变，先跑 `probe` 再决定。
 
 ---
 
@@ -392,6 +394,7 @@ node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
 | `applied` | 检测到标记，已经打过了（不会重复打） |
 | `miss` | 一条都对不上——版本不同，跳过 |
 | `no_pkg` / `no_file` | 目标包或文件不存在 |
+| `no_needle` | 查找串不在——通常说明引擎这段文案已经自己改过了，不需要打 |
 
 ---
 
@@ -415,7 +418,7 @@ node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
 |---|---|---|
 | 目标 | PC 上的 DSH | dsh-go |
 | 注入方式 | 自带 `core.js`（177 KB，补丁表已拆去 `lib/patches/`），正则逐句改写 + `defineProperty` 劫持 | 官方 waterfall 整段丢弃 |
-| 规模 | 518 文件 / 305 个 js+mjs / 4.83 MB | 约 70 文件 / 0.9 MB |
+| 规模 | 518 文件 / 305 个 js+mjs / 4.83 MB | **64 文件 / 0.84 MB** |
 | 补丁 | 自带（`lib/patches/` 拆成 6 个模块，83 条） | 导成 `patches.json`（87 条）+ 独立执行器 |
 | 桌面功能 | asar 解包、计划任务 | 无 |
 | 面板 | `packages/purge-panel/` 独立 Web 面板 | 无（试过移植，放弃） |
@@ -564,14 +567,21 @@ node patches/purge-patch.mjs apply --dry
 ## 目录
 
 ```
-lib/          注入层 18 个模块（来自 LanJinGod）
-assets/       categories.json / default-prompt.md / net-scope-ranges.json
-skills/redteam/   23 个红队技能
-presets/redteam/  红队预设
-patches/      patches.json（87 条）+ purge-patch.mjs（执行器）
-scripts/      engine-smoke（段注册与 assemble 重排验证）/ kit-check（插件规范检查）
+lib/              注入层 18 个模块（来自 LanJinGod）
+assets/           categories.json / default-prompt.md / net-scope-ranges.json
+skills/redteam/   23 个红队技能（md）
+presets/redteam/  红队预设（3 个文件）
+patches/          patches.json（87 条）+ purge-patch.mjs（probe / apply / restore 执行器）
+scripts/          engine-smoke.mjs（段注册与 assemble 重排验证）· kit-check.mjs（插件规范检查）
+test/             7 组共 56 项测试
 cordis.patch.yml  插件插入声明
+package.json      清单（name / version / engines.dsh / dsh.bundle.patch）
+LICENSE           AGPL-3.0 全文
+NOTICE            三部分来源与各自许可
+README.md         本文
 ```
+
+合计 64 个文件、0.84 MB。
 
 改 `lib/` 之后必须重启引擎；改 `package.json` 会被热读。
 
