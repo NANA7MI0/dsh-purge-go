@@ -322,14 +322,31 @@ EOF
 
 ---
 
+## 装好即生效，不需要手动开
+
+**插件加载时就会自动破甲**，不用先跑什么命令。启动时会做两件事：
+
+```js
+if (cfg.seedPrompt !== false) seedInject(home)                      // 落盘默认注入正文
+if (!isFile(statePath(home))) writeState(home, { enabled: true })  // 状态默认开启
+```
+
+也就是：`$DSH_HOME/prompt-inject.md` 自动写好（默认正文 25 KB），
+状态文件里 `enabled: true`，系统提示里立刻开始丢官方身份段。
+
+**装完重启引擎就完事了。** 下面这 5 个工具是「管理入口」，用来查状态、换正文、关掉再打开，
+不是「必须先跑一遍」的步骤。
+
+---
+
 ## 5 个操作工具
 
-装好插件之后，对话里会多出五个工具。**这是日常操作的主要入口**，不用记命令：
+装好之后，对话里会多出五个工具：
 
 | 工具 | 干什么 |
 |---|---|
 | `purge_status` | 看注入状态：开关、正文来源与体积、当前变体、按模型指定、上次组装时压掉了哪些官方段 |
-| `purge_apply` | 开启破甲，并确保 `$DSH_HOME/prompt-inject.md` 有正文（缺就落盘包内默认正文）。`force=true` 覆盖重写 |
+| `purge_apply` | 重新开启破甲并确保正文存在。**装的时候已经自动做过一次**，只在关掉之后想重开、或正文丢了想补回来时用。`force=true` 覆盖重写 |
 | `purge_revert` | 关闭破甲，把当前正文备份到 `dsh-purge/backups/`（正文本身保留） |
 | `purge_prompt` | 读写注入正文与变体。`show` / `set` / `reset` / `use` / `default` / `map`（按模型指定变体） |
 | `purge_category` | 题材分类扩展层。`list` / `add` / `rm` / `on` / `off` / `reset` / `bake` |
