@@ -533,7 +533,7 @@ assets/       categories.json / default-prompt.md / net-scope-ranges.json
 skills/redteam/   23 个红队技能
 presets/redteam/  红队预设
 patches/      patches.json（87 条）+ purge-patch.mjs（执行器）
-scripts/      engine-smoke / kit-check / build-selfinstall
+scripts/      engine-smoke（段注册与 assemble 重排验证）/ kit-check（插件规范检查）
 cordis.patch.yml  插件插入声明
 ```
 
