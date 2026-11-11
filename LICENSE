@@ -1,13 +1,7 @@
 MIT License
 
-Copyright (c) 2026 NANA7MI0 -- dsh-go adaptation layer
-                        (lib/index.js plugin wrapper, patches/purge-patch.mjs
-                         executor, README, packaging)
-Copyright (c) dsh-purge authors -- patch definitions
-                        (patches/patches.json, exported from the dsh-purge
-                         project, community fork mikamikasuki/dsh-purge)
-
-Both copyright holders license their respective portions under the terms below.
+Copyright (c) 2026 NANA7MI0
+Copyright (c) dsh-purge authors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

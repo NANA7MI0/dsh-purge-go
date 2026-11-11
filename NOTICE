@@ -1,0 +1,20 @@
+dsh-purge-go
+============
+
+This distribution combines two portions with separate authorship:
+
+1. patches/patches.json -- patch definitions (patterns, replacements, markers)
+   Exported from the dsh-purge project.
+   Community fork: https://github.com/mikamikasuki/dsh-purge
+   Original project: https://github.com/YuJunZhiXue/dsh-purge (no longer available)
+   Copyright (c) dsh-purge authors. Licensed under the terms of that project.
+
+2. Everything else -- dsh-go adaptation layer
+   lib/index.js, patches/purge-patch.mjs, cordis.patch.yml, README.md, packaging.
+   Copyright (c) 2026 NANA7MI0. MIT, see LICENSE.
+
+Repository ownership (NANA7MI0) means maintainer of the adaptation layer only.
+It does not assert authorship of the patch definitions in patches/patches.json.
+
+The operator prompt text consumed by the plugin ($DSH_HOME/prompt-inject.md) is
+supplied by the user at runtime and is not part of this repository.
