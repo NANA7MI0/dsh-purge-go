@@ -15,47 +15,11 @@
 >    （这条在 Android 上没有实际影响——手机端的文件沙箱本来就是空的，详见下面「沙箱」一节。
 >    **真正起作用的、也真正该担心的是第 1 条**。）
 >
-> **为什么非去掉审批不可？** 因为手机上留着它等于什么都干不了，不是「更安全」：
+> **代价很具体**：以后工具返回的网页、文档、日志里如果夹带指令，**没有第二道拦截**。
 >
-> - 引擎原文写死 `without an available answerer, the request fails closed` ——
->   没有应答器就直接拒绝
-> - 桌面版 DSH 有交互弹窗能应答，**dsh-go 没有这套 UI**
-> - 所以 `ask` 在手机上的实际行为是「写文件 = 失败」「跑命令 = 失败」「改设置 = 失败」，
->   任何需要审批的操作**必然被拒**
->
-> 破甲的另一半本来就是执行侧：**能聊 ≠ 能干**。不关审批，注入再强也只是让 AI 说得像。
->
-> **代价也很具体**：以后工具返回的网页、文档、日志里如果夹带指令，**没有第二道拦截**。
-> 这是同一件事的两面，拆不开。想只留一半，见下面「你得自己判断」里的中间选项。
+> 这不是可有可无的附加项——**手机上留着审批等于什么都干不了**，紧接着的下一节把原因讲清楚。
 
-## 两层各做什么
-
-**注入层**：走官方 `system-prompt/assemble` waterfall，在引擎组装系统提示时把整段身份声明
-（`harness:identity`、`deployment:persona-prefix`、`deployment:persona-suffix`）**丢掉**，
-只剩下工具定义、项目规则和你自己注入的正文。
-
-它**不逐句改写**系统提示里的安全约束——这是和早期实现最大的区别。
-
-**补丁层**：在 `node_modules` 里做精确字符串替换，改掉引擎里写死的行为。补丁不依赖行号，
-版本漂移时只会「没命中」，不会改坏文件。
-
-这一层是**破甲的另一半**，缺了它只是「说得像」，不是「做得到」。它改的是执行侧：
-
-| 改什么 | 不改会怎样 |
-|---|---|
-| 审批策略默认 `never`、两处提示句改自动放行 | 每次动手都 fail closed，模型只能说不能做 |
-| 沙箱 `deny file-write*` → `allow` | 写文件被拒 |
-| `includeHarnessIdentity` 默认 false | 身份段还在，注入被官方文本压过 |
-| 压缩后的弱基线换成强基线 | 压缩一轮之后又变回官方口气 |
-
-> 最后一行是**手改**的，不在 `patches.json` 里——新机器跑 `apply` 得不到这一条，
-> 要自己动 `dsh-agent-instructions` 的常量。见「已知限制」。
-
-想验证这个判断，可以**只装插件、不跑补丁层的 `purge-patch.mjs apply`**，
-对比一下「能聊」和「能干」的差别。（注意：插件本身的「装好即生效」指的是注入层，
-和这里说的补丁层 `apply` 是两件事。）
-
-### 为什么必须去掉审批和沙箱
+## 1. 为什么必须去掉审批和沙箱
 
 **为了让破甲效果和原版接近，审批和沙箱必须一起来掉。** 这不是顺手，是前提条件。原因有两层。
 
@@ -125,6 +89,35 @@ dsh-purge 的选择是把 fail-closed 改成 fail-open——审批环节整个�
 
 **所以取舍是**：要「接近原版的破甲」，就必须接受「没有第二道拦截」。两者是同一件事的两面，
 拆不开。想只留一半，见下面「你得自己判断」里的中间选项。
+
+---
+
+## 2. 两层各做什么
+
+**注入层**：走官方 `system-prompt/assemble` waterfall，在引擎组装系统提示时把整段身份声明
+（`harness:identity`、`deployment:persona-prefix`、`deployment:persona-suffix`）**丢掉**，
+只剩下工具定义、项目规则和你自己注入的正文。
+
+它**不逐句改写**系统提示里的安全约束——这是和早期实现最大的区别。
+
+**补丁层**：在 `node_modules` 里做精确字符串替换，改掉引擎里写死的行为。补丁不依赖行号，
+版本漂移时只会「没命中」，不会改坏文件。
+
+这一层是**破甲的另一半**，缺了它只是「说得像」，不是「做得到」。它改的是执行侧：
+
+| 改什么 | 不改会怎样 |
+|---|---|
+| 审批策略默认 `never`、两处提示句改自动放行 | 每次动手都 fail closed，模型只能说不能做 |
+| 沙箱 `deny file-write*` → `allow` | 写文件被拒 |
+| `includeHarnessIdentity` 默认 false | 身份段还在，注入被官方文本压过 |
+| 压缩后的弱基线换成强基线 | 压缩一轮之后又变回官方口气 |
+
+> 最后一行是**手改**的，不在 `patches.json` 里——新机器跑 `apply` 得不到这一条，
+> 要自己动 `dsh-agent-instructions` 的常量。见「已知限制」。
+
+想验证这个判断，可以**只装插件、不跑补丁层的 `purge-patch.mjs apply`**，
+对比一下「能聊」和「能干」的差别。（注意：插件本身的「装好即生效」指的是注入层，
+和这里说的补丁层 `apply` 是两件事。）
 
 ### 沙箱：手机上和桌面上不是一回事
 
@@ -197,7 +190,7 @@ case "read-only":
 
 ---
 
-## 定位：只保留核心破甲，桌面版其余功能全部放弃
+## 3. 定位：只保留核心破甲，桌面版其余功能全部放弃
 
 原版 `kingcharleslzy-ai/dsh-purge`（社区维护版，★6966）是**桌面版**：**518 个文件**，
 其中 js + mjs **305 个、共 4.83 MB**。光 `client.js` 就 662 KB，另有一个独立的
@@ -311,7 +304,7 @@ redteam_vulns
 
 ---
 
-## 环境
+## 4. 环境
 
 | 项 | 值 |
 |---|---|
@@ -338,7 +331,7 @@ dsh: nothing was installed.
 
 ---
 
-## 安装
+## 5. 安装
 
 ```sh
 git clone https://github.com/NANA7MI0/dsh-purge-go ~/dsh-purge-go
@@ -405,7 +398,7 @@ am force-stop io.github.ccch1mneyyy.dsh_app
 
 ---
 
-## 装好即生效，不需要手动开
+## 6. 装好即生效，不需要手动开
 
 **插件加载时就会自动破甲**，不用先跑什么命令。启动时会做两件事：
 
@@ -422,7 +415,7 @@ if (!isFile(statePath(home))) writeState(home, { enabled: cfg.enabled !== false 
 
 ---
 
-## 5 个操作工具
+## 7. 5 个操作工具
 
 装好之后，对话里会多出五个工具：
 
@@ -444,7 +437,7 @@ if (!isFile(statePath(home))) writeState(home, { enabled: cfg.enabled !== false 
 
 ---
 
-## 打补丁
+## 8. 打补丁
 
 ```sh
 node patches/purge-patch.mjs probe            # 扫描：哪些能打、哪些版本不匹配（会在当前目录写 patch-probe.json）
@@ -491,7 +484,7 @@ node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
 
 ---
 
-## 状态含义
+## 9. 状态含义
 
 | 状态 | 含义 |
 |---|---|
@@ -504,7 +497,7 @@ node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
 
 ---
 
-## 关键补丁
+## 10. 关键补丁
 
 87 条覆盖提示词、代码、工具、兼容四类。最要紧的：
 
@@ -519,7 +512,7 @@ node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
 
 ---
 
-## 和桌面版 dsh-purge 的差别
+## 11. 和桌面版 dsh-purge 的差别
 
 | 项 | 桌面版 `kingcharleslzy-ai/dsh-purge` | 本仓库 |
 |---|---|---|
@@ -533,7 +526,7 @@ node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
 
 ---
 
-## 刻意不做的几件事
+## 12. 刻意不做的几件事
 
 不是漏了，是权衡之后决定不做。
 
@@ -630,7 +623,7 @@ node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
 
 ---
 
-## 已知限制
+## 13. 已知限制
 
 1. **只对新会话完全生效**。引擎把系统提示写进对话历史（`systemPromptUpdate: "in-history"`），
   旧会话里那条旧 system 还在，注入顶不动它。
@@ -641,7 +634,7 @@ node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
 
 ---
 
-## 卸载插件
+## 14. 卸载插件
 
 先关掉注入，再摘插件：
 
@@ -672,7 +665,7 @@ rm -rf ~/.dsh/profiles/web/node_modules/dsh-purge-go
 
 ---
 
-## 回滚补丁
+## 15. 回滚补丁
 
 补丁**按批次逆序撤**才算干净（后打的先撤）：
 
@@ -700,7 +693,7 @@ grep -rl "dsh-purge" /opt/dsh/node_modules/@deepseek-ai/
 
 ---
 
-## 升级引擎之后
+## 16. 升级引擎之后
 
 升级会覆盖整个 `node_modules`，补丁全丢。别急着 `apply`：
 
@@ -713,7 +706,7 @@ node patches/purge-patch.mjs apply --dry
 
 ---
 
-## 目录
+## 17. 目录
 
 ```
 lib/              注入层 18 个模块（来自 LanJinGod）
@@ -735,7 +728,7 @@ README.md         本文
 
 ---
 
-## 来源与许可
+## 18. 来源与许可
 
 | 部分 | 作者 |
 |---|---|
@@ -749,7 +742,7 @@ README.md         本文
 
 ---
 
-## 更新日志
+## 19. 更新日志
 
 ### 0.3.1
 
