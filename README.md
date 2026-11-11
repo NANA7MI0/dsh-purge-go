@@ -391,6 +391,61 @@ node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
 
 不是漏了，是权衡之后决定不做。
 
+### 不做 Web 控制面板（试过，放弃了）
+
+原版带一个独立面板包 `packages/purge-panel`（`dsh-purge-panel` v1.1.2，56 个文件，
+661 KB 的打包产物），是个 React 写的 Web 界面，能看补丁状态、点按钮应用/回滚。
+
+**试过移植，技术上能挂上，但代价太大，最后放弃。** 下面是完整经过，省得后来人再走一遍。
+
+**能成的部分**
+
+- 它依赖的 6 个 `@deepseek-ai/dsh-client-*` 包里 4 个存在，缺的 2 个（`dsh-client-runtime`、
+  `dsh-client-ui-slots`）只要把 `package.json` 的 `dsh.client.inject` 换成
+  `dsh-client-ui-renderer` 就能过——**改完重新构建，产物字节数和原版一模一样（661562）**。
+- UI 确实挂上了，右侧栏出现 Purge 入口，标签页正常渲染。
+
+**卡住的部分**
+
+1. **后端接口完全没有**。面板要 `/dsh-purge/status`、`/apply`、`/revert` 等 9 个端点，
+   这些由桌面版的 `core.js` 提供。dsh-go 里没有任何东西接这一层，页面一进就是
+   「状态读取失败 404」。
+
+2. **要自己在 `webServer` 上注册路由**。查到了 `dsh-host-webserver` 的
+   `register({ kind, path, handler })`，也写出了 `/dsh-purge/status`，
+   `curl` 能拿到 87 条补丁的真实数据。
+
+3. **还有个 dsh-go 特有的鉴权闸**。`dsh-host-webserver` 里有：
+
+   ```js
+   static dshGoOpenRoutes = new Set(["exact /connect", "exact /oauth/callback"]);
+   ```
+
+   所有命名路由默认要过 `Connection` 鉴权（Host/Origin 围栏 + 浏览器 cookie）。
+   把 `prefixes /dsh-purge` 加进这个白名单才能通。
+
+4. **最后一步踩了雷**：面板的 `apiUrl()` 会以模块所在目录为基准拼路径，实际请求变成了
+   `/plugins/dsh-purge/status`，不是 `/dsh-purge/status`。为了兜住，我注册了一个
+   **`prefixes "/"` 的兜底路由**——结果它把 `GET /`（App 首页）也吞了，
+   引擎在跑、端口在听，但 **App 打不开首页，显示「连接失败」**。
+
+   这个错误影响到了正常使用，只能回滚：卸掉面板插件、删掉 `lib/api.js`、
+   把插件配置改成 `panelApi: false`。
+
+**结论**
+
+| 项 | 状态 |
+|---|---|
+| 面板 UI 能不能挂上 | 能 |
+| 面板后端要不要重写 | **要**（9 个端点 + 鉴权白名单） |
+| 会不会危及主流程 | **会**（路由前缀写错就把首页吞了） |
+| 投入产出 | 不划算 |
+
+**所以这个仓库不带面板，只有命令行。** 想用面板请去桌面版，那边 `core.js` 是完整的。
+
+如果你自己要做，记住三件事：**别注册 `prefixes "/"`**、`dshGoOpenRoutes` 要加白名单、
+面板的真实请求前缀是 `/plugins/<包名>/...` 而不是根路径。
+
 ### 不补 `rewind` 增强模块
 
 原版有个 `lib/rewind.js`（20 KB），在引擎自带的回退之上做增强——「撤一步 / 撤一整轮」两种粒度、
