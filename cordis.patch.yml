@@ -1,0 +1,5 @@
+# dsh-purge-mini bundle patch
+- insert:
+    - id: dsh-purge-mini
+      name: dsh-purge-mini
+      inject: [systemPrompt]

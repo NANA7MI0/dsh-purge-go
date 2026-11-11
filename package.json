@@ -1,0 +1,35 @@
+{
+  "name": "dsh-purge-go",
+  "version": "0.1.0",
+  "description": "dsh-go 手机版适配的 dsh-purge：注入层插件（提示词段 + 能力段 + assemble 身份改写）+ 82 条 host 源码补丁的探测/应用/回滚工具",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    }
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "license": "MIT",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-go",
+    "android",
+    "prompt-inject"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ccch1mneyyy/dsh-purge-go.git"
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "patches",
+    "README.md"
+  ]
+}
