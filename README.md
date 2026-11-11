@@ -330,26 +330,30 @@ dsh: nothing was installed.
 ## 安装
 
 ```sh
-mkdir -p /root/tools
-git clone https://github.com/NANA7MI0/dsh-purge-go /root/tools/dsh-purge-go
-dsh plugin --profile web add /root/tools/dsh-purge-go
+git clone https://github.com/NANA7MI0/dsh-purge-go ~/dsh-purge-go
+dsh plugin --profile web add ~/dsh-purge-go
 ```
 
-装到别的位置也行，把第二条命令的路径换掉即可。
+装到哪都行，两条命令的路径保持一致即可。用 `~`（也就是 `$HOME`）而不是写死 `/root`，是因为**不同环境家目录不一样**：
+
+- dsh-go 跑在 proot 里，`$HOME` 是 `/root`——但这个 root 是 proot 映射出来的**假身份**，真实进程属于 App 的 uid，**不需要任何 root 权限**
+- 在普通 Linux / PC 上装，`$HOME` 是 `/home/你的用户名`，写死 `/root` 反而会失败
+
+所以跟着 `~` 走最省事。
 
 **两个常见失败**：
 
-- `destination path already exists` —— `/root/tools/dsh-purge-go` 已经被占了（可能放了别的东西）。
-  换个名字：`git clone ... /root/tools/dsh-purge-go2`，后面路径跟着改。
+- `destination path already exists` —— `~/dsh-purge-go` 已经被占了（可能放了别的东西）。
+  换个名字：`git clone ... ~/dsh-purge-go2`，后面路径跟着改。
 - `could not read Username for 'https://github.com'` —— 大概率是 **GitHub 限流**（429），
   不是仓库私有。换 tar 包：
 
   ```sh
   curl -L https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main | tar xz
-  mv dsh-purge-go-main /root/tools/dsh-purge-go
+  mv dsh-purge-go-main ~/dsh-purge-go
   ```
 
-**不用手动准备注入正文**——插件首次加载时会自动把包内默认正文（25 KB）落盘到
+**不用手动准备注入正文**——插件首次加载时会自动把包内默认正文（约 26 KB，会拼上题材分类扩展）落盘到
 `~/.dsh/prompt-inject.md`，并默认开启。想换成自己写的，装好之后用 `purge_prompt` 的 `set`
 或直接编辑那个文件都行。
 
