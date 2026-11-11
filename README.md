@@ -2,8 +2,8 @@
 
 把 **dsh-purge** 移植适配到 **dsh-go**（Android + proot 里的 DSH 引擎）。
 
-两层：**注入层**直接引用 [LanJinGod/dsh-purge-go](https://github.com/LanJinGod/dsh-purge-go)，
-**补丁层**是本仓库独立实现的 87 条引擎源码补丁。
+两层：**注入层**直接引用 [LanJinGod/dsh-purge-go](https://github.com/LanJinGod/dsh-purge-go)；
+**补丁层**的 87 条数据导出自社区维护版（MIT），执行器和包名映射由本仓库实现。
 
 > ### ⚠️ 装之前先看清楚
 >
@@ -37,6 +37,9 @@
 | `includeHarnessIdentity` 默认 false | 身份段还在，注入被官方文本压过 |
 | 压缩后的弱基线换成强基线 | 压缩一轮之后又变回官方口气 |
 
+> 最后一行是**手改**的，不在 `patches.json` 里——新机器跑 `apply` 得不到这一条，
+> 要自己动 `dsh-agent-instructions` 的常量。见「已知限制」。
+
 想验证这个判断，可以**只装插件、不跑补丁层的 `purge-patch.mjs apply`**，
 对比一下「能聊」和「能干」的差别。（注意：插件本身的「装好即生效」指的是注入层，
 和这里说的补丁层 `apply` 是两件事。）
@@ -66,7 +69,7 @@
 | #36 | 文件系统升级 schema 放行 | 提示词 |
 
 这十条在本仓库的 87 条里**定义都在**；其中 #13 / #14 / #34 的目标包手机上不存在
-（`probe` 报 `no_pkg`），实际生效的是剩下七条。也就是说，**dsh-purge 一直把"破甲"
+（`probe` 报 `no_pkg`），实际生效的是六条（#36 只命中部分替换串，其余五条完整）。也就是说，**dsh-purge 一直把"破甲"
 定义成包括把审批和沙箱拿掉**——不是附加项，是组成部分。
 
 原版 `core.js` 里对应的定义（**id 编号是桌面版的，和本仓库的 `patches.json` 不是同一套**）：
@@ -198,9 +201,9 @@ case "read-only":
 | `client.js`（662 KB 桌面客户端） | ❌ 丢弃 | 手机端没有对应界面 |
 | `packages/purge-panel/`（独立面板包 `dsh-purge-panel` v1.1.2） | ❌ 丢弃 | 试过移植，能挂上但后端要重写，放弃——详见「不做 Web 控制面板」 |
 | `desktop.js`（83 KB 桌面宿主） | ❌ 丢弃 | Android 无此形态 |
-| `extract-asar.js`（16 KB） | ❌ 丢弃 | 解包 Electron 应用，手机用不上 |
-| `hide-console.js`（13 KB） | ❌ 丢弃 | 隐藏 Windows 控制台窗口 |
-| `host-clean.js` | ❌ 丢弃 | 清理 Windows 计划任务 |
+| `extract-asar.js`（15 KB） | ❌ 丢弃 | 解包 Electron 应用，手机用不上 |
+| `hide-console.js`（12 KB） | ❌ 丢弃 | 隐藏 Windows 控制台窗口 |
+| `host-clean.js` | ❌ 丢弃 | 判定「宿主提示词已清洗」的几个标记串 |
 | Windows `schtasks` 逻辑 | ❌ 丢弃 | 无计划任务 |
 | PTC / `run_code` 沙箱改写 | ❌ 丢弃 | 那部分依赖桌面沙箱后端 |
 
@@ -260,14 +263,15 @@ window.__ModuleLoader__.load({ id: "dsh-purge", factory: (require) => {
 
 **③ 红队预设是空壳**
 
-预设的 `agent.cordis.yml` 要求 AI 调用 16 个工具（下面只列主要的几个）：
+预设的 `agent.cordis.yml` 要求 AI 调用这 16 个工具：
 
 ```
-redteam_preflight      redteam_agent_slot     redteam_engagement_open
-redteam_sessions       redteam_session_bind   redteam_session_info
-redteam_asset_query    redteam_asset_stats    redteam_attack_chain
-redteam_chain          redteam_score_list     redteam_role_prompt
-redteam_vuln_query
+redteam_preflight       redteam_agent_slot      redteam_engagement_open
+redteam_sessions        redteam_session_bind    redteam_session_info
+redteam_asset_stats     redteam_attack_chain    redteam_credentials
+redteam_evidence_list   redteam_evidence_upgrade redteam_evidence_verify
+redteam_score_list      redteam_role_prompt     redteam_unverified_count
+redteam_vulns
 ```
 
 这些工具由 `dsh-redteam-store` 和 `dsh-redteam-ui` 两个插件提供——**这两个包在本机都不存在**。
@@ -280,8 +284,9 @@ redteam_vuln_query
 
 **⑤ 23 条红队技能同步了但进不了技能目录**
 
-文件确实落到了 `~/.dsh/redteam/skills/`（23 个），但引擎的技能目录只扫 `~/.dsh/skills/`，
-所以日常对话里**根本看不到它们**。既不占上下文，也调不出来，等于静态文档。
+文件确实落到了 `~/.dsh/redteam/skills/`（23 个），但引擎的技能根目录是这几类——
+项目内 `.dsh/skills`、`.agents/skills`、自定义目录、`~/.dsh/skills`、`~/.agents/skills`、内置——
+**`~/.dsh/redteam/skills` 不在其中任何一个**，所以日常对话里看不到它们。既不占上下文，也调不出来，等于静态文档。
 
 > 结论：这些能力在 Android + proot 这个形态下**没有可运行的落点**。
 > 保留它们只会让仓库看起来功能很多，实际一用就报错。
@@ -391,7 +396,7 @@ am force-stop io.github.ccch1mneyyy.dsh_app
 
 ```js
 if (cfg.seedPrompt !== false) seedInject(home)                      // 落盘默认注入正文
-if (!isFile(statePath(home))) writeState(home, { enabled: true })  // 状态默认开启
+if (!isFile(statePath(home))) writeState(home, { enabled: cfg.enabled !== false })  // 状态默认开启
 ```
 
 也就是：`$DSH_HOME/prompt-inject.md` 自动写好（默认正文 25 KB），
@@ -413,6 +418,9 @@ if (!isFile(statePath(home))) writeState(home, { enabled: true })  // 状态默�
 | `purge_revert` | 关闭破甲，把当前正文备份到 `dsh-purge/backups/`（正文本身保留） |
 | `purge_prompt` | 读写注入正文与变体。`show` / `set` / `reset` / `use` / `default` / `map`（按模型指定变体） |
 | `purge_category` | 题材分类扩展层。`list` / `add` / `rm` / `on` / `off` / `reset` / `bake` |
+
+除了工具，还注册了一个斜杠命令 `/purge`，可以直接在输入框敲：
+`/purge prompt set /sdcard/x.md`（从文件读正文）、`/purge status` 等。
 
 **它们管的是注入层，不管补丁。** 补丁（`patches.json` 那 87 条）走另一条路，见下一节。
 
@@ -449,12 +457,20 @@ node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
 
 合计 87。换引擎版本后分布会变，先跑 `probe` 再决定。
 
-> **有 14 条补丁数据残缺**（`patches.json` 里标了 `broken: true`）：3 / 21 / 73 / 77 的
-> `pattern` 是空对象，永远匹配不上；5 / 6 / 7 / 8 / 10 / 15 / 16 压根没有 `replacements`；
-> 32 / 40 / 53 少了部分替换项。这些是从社区版导数据时丢的字段，手工补不回来。
-> 它们不影响其余 73 条，但**不要指望这几条生效**。
+> **有 4 条补丁数据残缺**（`patches.json` 里标了 `broken: true`）：**3 / 21 / 73 / 77**，
+> 它们的 `pattern` 是空对象，永远匹配不上。这是从社区版导数据时丢的字段，手工补不回来。
+> 不影响其余 83 条。
+>
+> 另外 **32 / 40 / 53** 少了部分替换项，能打但不完整（会在 `probe` 里显示 `partial`）。
+>
+> **关于两种数据格式**：`patches.json` 里有两种写法——
+> `replacements: [{pattern, replace}, ...]` 和旧式的 `patterns: [...] + replace: "..."`。
+> 执行器 `editsOf()` **两种都支持**，不是只有前者有效。5 / 6 / 7 / 8 / 10 / 15 / 16 这几条
+> 审批与沙箱的核心补丁用的就是旧式写法，实测全部 `applied`——别看到没有 `replacements`
+> 就以为它们坏了。
 
-> **关于多目标补丁**：`patches.json` 里有 33 条的 `file` 是数组（同一条要在多个包里打）。
+> **关于多目标补丁**：`patches.json` 里有 58 条的 `file` 写成了数组，其中 33 条长度大于 1
+> （同一条要在多个包里打，其余 25 条是只含一个元素的数组）。
 > `probe` 会逐个包判定，**全部目标都打过才算 `applied`**——早期版本只看第一个包，
 > 会把这类补丁误报成已应用，实际数字偏高。现在的 45 是按全目标口径算的。
 
@@ -469,7 +485,7 @@ node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
 | `applied` | 检测到标记，已经打过了（不会重复打） |
 | `miss` | 一条都对不上——版本不同，跳过 |
 | `no_pkg` / `no_file` | 目标包或文件不存在 |
-| `no_needle` | 查找串不在——通常说明引擎这段文案已经自己改过了，不需要打 |
+| `no_needle` | 数据里 `pattern` 为空或不可用，命中不了（数据残缺，不是版本漂移） |
 
 ---
 

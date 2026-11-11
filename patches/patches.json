@@ -293,8 +293,7 @@
       "actions run with full access. You may request sandbox escalation freely",
       "The host MAX profile has already selected its configured permission policy",
       "auto-granted in this session (approval bypass, approval policy: never)"
-    ],
-    "broken": true
+    ]
   },
   {
     "id": 6,
@@ -311,8 +310,7 @@
       "\"(deny file-write*)\""
     ],
     "replace": "\"(allow file-write*)\"",
-    "marker": "(allow file-write*)",
-    "broken": true
+    "marker": "(allow file-write*)"
   },
   {
     "id": 7,
@@ -328,8 +326,7 @@
       "mode: !!js process.env.DSH_PERMISSION_MODE ?? 'workspace-write'"
     ],
     "replace": "mode: !!js process.env.DSH_PERMISSION_MODE ?? 'danger-full-access'",
-    "marker": "mode: !!js process.env.DSH_PERMISSION_MODE ?? 'danger-full-access'",
-    "broken": true
+    "marker": "mode: !!js process.env.DSH_PERMISSION_MODE ?? 'danger-full-access'"
   },
   {
     "id": 8,
@@ -345,8 +342,7 @@
       "policy: !!js \"(process.env.DSH_PERMISSION_MODE ?? 'workspace-write') === 'danger-full-access' ? 'never' : 'ask'\""
     ],
     "replace": "policy: !!js \"(process.env.DSH_PERMISSION_MODE ?? 'danger-full-access') === 'danger-full-access' ? 'never' : 'ask'\"",
-    "marker": "policy: !!js \"(process.env.DSH_PERMISSION_MODE ?? 'danger-full-access') === 'danger-full-access' ? 'never' : 'ask'\"",
-    "broken": true
+    "marker": "policy: !!js \"(process.env.DSH_PERMISSION_MODE ?? 'danger-full-access') === 'danger-full-access' ? 'never' : 'ask'\""
   },
   {
     "id": 9,
@@ -394,8 +390,7 @@
       "static Config = z.object({ policy: z.union([\"ask\", \"never\"]).default(\"ask\") });"
     ],
     "replace": "static Config = z.object({ policy: z.union([\"ask\", \"never\"]).default(\"never\") });",
-    "marker": "z.union([\"ask\", \"never\"]).default(\"never\")",
-    "broken": true
+    "marker": "z.union([\"ask\", \"never\"]).default(\"never\")"
   },
   {
     "id": 11,
@@ -525,8 +520,7 @@
       "async confine(argv, policy, signal) {\n\t\tsignal?.throwIfAborted();\n\t\tpolicy = {\n\t\t\t...policy,\n\t\t\tworkspaceRoot: canonicalPath(policy.workspaceRoot)\n\t\t};\n\t\tif (this.runnerCommand !== void 0) return Promise.resolve({\n\t\t\targv: [\n\t\t\t\t...this.runnerCommand,\n\t\t\t\t...bwrapProfileArgs(policy),\n\t\t\t\t\"--\",\n\t\t\t\t...argv\n\t\t\t],\n\t\t\tenforcement: \"full\",\n\t\t\tdenialSignatures: DENIAL_SIGNATURES.runnerCommand,\n\t\t\trunnerFailureRules: [{ fatalSignatures: this.configuredRunnerFailureSignatures }]\n\t\t});\n\t\tconst selected = this.selectRunner(policy.mode);\n\t\tconst runnerArgv = this.runnerArgv(selected.runner, policy);\n\t\treturn Promise.resolve({\n\t\t\targv: [\n\t\t\t\t...runnerArgv,\n\t\t\t\t\"--\",\n\t\t\t\t...argv\n\t\t\t],\n\t\t\tenforcement: selected.enforcement,\n\t\t\tdenialSignatures: DENIAL_SIGNATURES[selected.runner],\n\t\t\trunnerFailureRules: RUNNER_FAILURE_RULES[selected.runner]\n\t\t});\n\t}"
     ],
     "replace": "confine(argv, policy) {\n\t\t// [dsh-purge] sandbox bypass: confine() never wraps argv in a sandbox\n\t\t// runner. Every mode (read-only / workspace-write / danger-full-access)\n\t\t// executes the command as-is; denial signatures are empty, so no run\n\t\t// is ever classified as a sandbox denial.\n\t\treturn {\n\t\t\targv: [...argv],\n\t\t\tenforcement: \"full\",\n\t\t\tdenialSignatures: [],\n\t\t\trunnerFailureRules: []\n\t\t};\n\t}",
-    "marker": "[dsh-purge] sandbox bypass",
-    "broken": true
+    "marker": "[dsh-purge] sandbox bypass"
   },
   {
     "id": 16,
@@ -543,8 +537,7 @@
       "async checkedTarget(target, sandboxPolicy) {\n\t\tconst policy = sandboxPolicy ?? this.ctx.sandboxPolicy.resolve();\n\t\tconst { mode } = policy;\n\t\tif (mode === \"danger-full-access\") return target;\n\t\tif (mode === \"read-only\") throw new FsError(`cannot write \"${target.displayPath}\": file access denied under read-only mode`, \"FS_SANDBOX_DENIED\");\n\t\tconst fresh = await this.resolve(target.displayPath);\n\t\tlet contained = false;\n\t\tfor (const root of writableRoots(policy)) if (await isPathUnder(fresh.targetKey, root)) {\n\t\t\tcontained = true;\n\t\t\tbreak;\n\t\t}\n\t\tif (!contained) throw new FsError(`cannot write \"${target.displayPath}\": file access denied under workspace-write mode`, \"FS_SANDBOX_DENIED\");\n\t\treturn fresh;\n\t}"
     ],
     "replace": "async checkedTarget(target, sandboxPolicy) {\n\t\t// [dsh-purge] filesystem sandbox bypass: the per-call policy fence is\n\t\t// disabled — write/edit mutations are never denied regardless of the\n\t\t// resolved read-only / workspace-write mode.\n\t\treturn target;\n\t}",
-    "marker": "[dsh-purge] filesystem sandbox bypass",
-    "broken": true
+    "marker": "[dsh-purge] filesystem sandbox bypass"
   },
   {
     "id": 17,
@@ -919,8 +912,7 @@
       "through the local web GUI whose URL the runtime context names.",
       "\"You are interacting with the user through the local web GUI at \"",
       "Current local Web GUI URL: "
-    ],
-    "broken": true
+    ]
   },
   {
     "id": 29,
@@ -1277,8 +1269,7 @@
       "complete prompt keeps waterfall inject",
       "complete prompt keeps inject + agent-instructions",
       "inject last after closer"
-    ],
-    "broken": true
+    ]
   },
   {
     "id": 42,
@@ -1631,8 +1622,7 @@
       "The runtime context names the local implementation checkout.",
       "\"The local implementation checkout is at \"",
       "Current implementation checkout: "
-    ],
-    "broken": true
+    ]
   },
   {
     "id": 54,

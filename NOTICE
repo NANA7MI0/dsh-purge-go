@@ -1,7 +1,7 @@
 dsh-purge-go
 ============
 
-本发行版合并了两部分来源不同的内容：
+本发行版合并了三部分来源不同的内容：
 
 1. lib/、assets/、skills/redteam/、presets/redteam/ —— 提示词注入层
    来自 LanJinGod/dsh-purge-go
