@@ -34,8 +34,6 @@
   "files": [
     "lib",
     "assets",
-    "skills",
-    "presets",
     "patches",
     "cordis.patch.yml",
     "LICENSE",

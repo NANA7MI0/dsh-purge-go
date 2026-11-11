@@ -604,7 +604,18 @@ node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
 ### 不移植红队执行框架
 
 原版的 `lib/redteam/` 约 1.1 MB（资产库、攻击链、评分、会话管理），依赖 SQLite 和桌面 UI。
-本仓库只带了 23 条技能文档，没有执行框架——**技能能读，指挥台用不了**。
+执行框架要的 16 个 `redteam_*` 工具由 `dsh-redteam-store` / `dsh-redteam-ui` 提供，
+**这两个包在 dsh-go 里都不存在**，切到 redteam 预设 AI 只会对着空工具空转。
+
+**早期版本还留着 23 条技能文档和 3 个预设文件（238 KB），后来也删了**，原因是它们白占地方：
+
+- 技能落在 `~/.dsh/redteam/skills/`，而引擎的技能根目录只有
+  `.dsh/skills`、`.agents/skills`、自定义目录、`~/.dsh/skills`、`~/.agents/skills`、内置——
+  **`redteam/skills` 不在其中**，扫不到，AI 根本看不见
+- 预设依赖上面那些不存在的工具
+- 跟着一起删的还有 `lib/redteam.js`（同步逻辑）、`lib/objective.js`（目标卡，读 `~/.dsh/redteam/current`）
+
+如果你手上有旧版本留下的 `~/.dsh/redteam/`，可以直接删掉，不影响任何功能。
 
 ---
 
@@ -638,12 +649,11 @@ dsh plugin --profile web remove dsh-purge-go
 | `node_modules/dsh-purge-go` 软链 | `~/.dsh/profiles/web/` | 可以留着，无害 |
 | `prompt-inject.md` | `~/.dsh/` | **想彻底清就删**，留着也不会生效 |
 | `dsh-purge/`（state、备份） | `~/.dsh/` | 想重装恢复状态就留着 |
-| `redteam/`（23 个技能 md） | `~/.dsh/` | 同上 |
 
 要连文件一起清：
 
 ```sh
-rm -rf ~/.dsh/prompt-inject.md ~/.dsh/dsh-purge ~/.dsh/redteam
+rm -rf ~/.dsh/prompt-inject.md ~/.dsh/dsh-purge
 rm -rf ~/.dsh/profiles/web/node_modules/dsh-purge-go
 ```
 
@@ -697,8 +707,7 @@ node patches/purge-patch.mjs apply --dry
 ```
 lib/              注入层 18 个模块（来自 LanJinGod）
 assets/           categories.json / default-prompt.md / net-scope-ranges.json
-skills/redteam/   23 个红队技能（md）
-presets/redteam/  红队预设（3 个文件）
+（skills/ 与 presets/ 已随红队子系统一起移除）
 patches/          patches.json（87 条）+ purge-patch.mjs（probe / apply / restore 执行器）
 scripts/          engine-smoke.mjs（段注册与 assemble 重排验证）· kit-check.mjs（插件规范检查，需外部 plugin-kit）
 test/             7 组共 56 项测试
@@ -719,7 +728,7 @@ README.md         本文
 
 | 部分 | 作者 |
 |---|---|
-| `lib/`、`assets/`、`skills/redteam/`、`presets/` | [LanJinGod/dsh-purge-go](https://github.com/LanJinGod/dsh-purge-go)，直接引用，本仓库只做 dsh-go 侧路径适配 |
+| `lib/`、`assets/` | [LanJinGod/dsh-purge-go](https://github.com/LanJinGod/dsh-purge-go)，直接引用，本仓库只做 dsh-go 侧路径适配 |
 | `patches/patches.json` | dsh-purge 社区维护版作者 小杨 / YuJunZhiXue（数据导出自 [kingcharleslzy-ai/dsh-purge](https://github.com/kingcharleslzy-ai/dsh-purge) v1.6.93，MIT） |
 | `patches/purge-patch.mjs`、README、包名映射 | 本仓库 |
 

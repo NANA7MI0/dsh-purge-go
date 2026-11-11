@@ -50,7 +50,7 @@ test('apply：注册三个段、三个事件、四个工具、一条命令、原
   const { ctx, record } = fakeHost()
   apply(ctx, { home })
 
-  assert.deepEqual(record.sections.map((section) => section.name), ['dsh-purge', 'dshpg-capabilities', 'dshpg-objective'])
+  assert.deepEqual(record.sections.map((section) => section.name), ['dsh-purge', 'dshpg-capabilities'])
   for (const section of record.sections) {
     assert.equal(section.interpolate, false)
     assert.ok(Number.isFinite(section.order))
