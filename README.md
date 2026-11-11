@@ -145,6 +145,63 @@ case "read-only":
 | Windows `schtasks` 逻辑 | ❌ 丢弃 | 无计划任务 |
 | PTC / `run_code` 沙箱改写 | ❌ 丢弃 | 那部分依赖桌面沙箱后端 |
 
+### 砍掉的部分是实测跑不起来的，不是"估计用不上"
+
+不是凭感觉删的，逐项在本机（Android 16 / proot / Node 24）试过：
+
+**① 原版 `core.js` 直接 import 就崩**
+
+````
+$ node core.js
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module
+  '/root/tools/dsh-purge-go/hide-console.js' imported from
+  '/root/tools/dsh-purge-go/core.js'
+```
+
+它 import 的 `desktop.js`、`hide-console.js`、`extract-asar.js`、`surface.js`、
+`host-clean.js` **五个模块全都不在**——因为打包时只带出来一个 `core.js`。
+少一个都加载不了，何况少五个。
+
+**② `client.js`（505 KB）在手机上根本没有运行环境**
+
+文件开头第一行：
+
+```js
+window.__ModuleLoader__.load({ id: "dsh-purge", factory: (require) => {
+```
+
+它依赖浏览器 / Electron 的 `window.__ModuleLoader__`。手机上的 node 进程**没有 `window`**，
+这行第一句就已经 `ReferenceError`。
+
+**③ 红队预设是空壳**
+
+预设的 `agent.cordis.yml` 要求 AI 调用 13 个工具：
+
+```
+redteam_preflight      redteam_agent_slot     redteam_engagement_open
+redteam_sessions       redteam_session_bind   redteam_session_info
+redteam_asset_query    redteam_asset_stats    redteam_attack_chain
+redteam_chain          redteam_score_list     redteam_role_prompt
+redteam_vuln_query
+```
+
+这些工具由 `dsh-redteam-store` 和 `dsh-redteam-ui` 两个插件提供——**这两个包在本机都不存在**。
+切到 redteam 预设，AI 只会对着不存在的工具空转。
+
+**④ 补丁表里 29 条 `no_pkg` 就是桌面专属**
+
+`probe` 的 `no_pkg` 分类（29 条）对应的都是桌面壳、OAuth 登录流程、Electron preset 这类东西，
+手机端没有这些包，补丁无从下手。
+
+**⑤ 23 条红队技能同步了但进不了技能目录**
+
+文件确实落到了 `~/.dsh/redteam/skills/`（23 个），但引擎的技能目录只扫 `~/.dsh/skills/`，
+所以日常对话里**根本看不到它们**。既不占上下文，也调不出来，等于静态文档。
+
+> 结论：这些能力在 Android + proot 这个形态下**没有可运行的落点**。
+> 保留它们只会让仓库看起来功能很多，实际一用就报错。
+> 所以砍到只剩注入 + 补丁。
+
 **为什么这么砍**：手机上的 DSH 引擎只有 `systemPrompt` / `tools` / `commands` 这几个服务，
 桌面版一大半代码在这里没有落点。留着只会增加体积和出错面。
 
