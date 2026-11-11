@@ -114,18 +114,28 @@ function probe(root) {
     if (!cands.length) { rows.push({ id: p.id, name: p.name, status: "no_pkg" }); continue; }
     const rel = relOf(p);
     const edits = editsOf(p);
-    let best = null;
+    // 每条补丁要对**所有**候选包分别判定：多目标补丁（file 是数组）只打第一个包是错的。
+    const hitsRows = [];
     for (const pkg of cands) {
       const file = path.join(root, pkg, ...rel);
       if (!fs.existsSync(file) || !fs.statSync(file).isFile()) continue;
       const text = fs.readFileSync(file, "utf8");
-      if (!edits.length) { best = { status: "no_needle", pkg, file }; break; }
+      if (!edits.length) { hitsRows.push({ status: "no_needle", pkg, file }); continue; }
       const hits = edits.filter((e) => text.includes(e.pat)).length;
       const st = marked(p, text) ? "applied" : hits === edits.length ? "hit" : hits === 0 ? "miss" : "partial";
-      best = { status: st, pkg, file, hits, total: edits.length };
-      if (st === "hit" || st === "applied") break;
+      hitsRows.push({ status: st, pkg, file, hits, total: edits.length });
     }
-    rows.push(Object.assign({ id: p.id, name: p.name }, best || { status: "no_file", pkg: cands.join(",") }));
+    if (!hitsRows.length) { rows.push({ id: p.id, name: p.name, status: "no_file", pkg: cands.join(",") }); continue; }
+    // 汇总成一条：只要有任一包可打就是 hit/partial，全打过才是 applied
+    const rank = { hit: 3, partial: 2, applied: 1, miss: 0, no_needle: 0 };
+    let top = hitsRows[0];
+    for (const r of hitsRows) if ((rank[r.status] ?? 0) > (rank[top.status] ?? 0)) top = r;
+    const allApplied = hitsRows.every((r) => r.status === "applied");
+    rows.push(Object.assign(
+      { id: p.id, name: p.name, status: allApplied ? "applied" : top.status },
+      top,
+      { status: allApplied ? "applied" : top.status, targets: hitsRows.length, files: hitsRows.map((r) => r.file) },
+    ));
   }
   return rows;
 }
@@ -154,14 +164,18 @@ function apply(root, backupDir, dry) {
   const byFile = new Map();
   for (const r of rows) {
     if (r.status !== "hit" && r.status !== "partial") continue;
-    if (!r.file) continue;
+    if (!r.files || !r.files.length) continue;
     const p = PATCHES.find((x) => x.id === r.id);
-    const text = fs.readFileSync(r.file, "utf8");
-    if (p.skipIfMarked && marked(p, text)) { console.log("skip(marked) " + r.id + "." + r.name); continue; }
-    const edits = editsOf(p).filter((e) => text.includes(e.pat));
-    if (!edits.length) continue;
-    if (!byFile.has(r.file)) byFile.set(r.file, []);
-    byFile.get(r.file).push({ id: r.id, name: r.name, edits: edits });
+    // 多目标补丁：每个目标文件都要单独打
+    for (const file of r.files) {
+      if (!fs.existsSync(file)) continue;
+      const text = fs.readFileSync(file, "utf8");
+      if (marked(p, text)) continue;
+      const edits = editsOf(p).filter((e) => text.includes(e.pat));
+      if (!edits.length) continue;
+      if (!byFile.has(file)) byFile.set(file, []);
+      byFile.get(file).push({ id: r.id, name: r.name, edits: edits });
+    }
   }
   if (!byFile.size) { console.log("nothing to apply"); return; }
   const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
