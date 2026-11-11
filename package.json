@@ -21,5 +21,23 @@
   },
   "engines": {
     "dsh": ">=0.2.1-rc.2 <0.3.0"
-  }
+  },
+  "author": "NANA7MI0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NANA7MI0/dsh-purge-go.git"
+  },
+  "homepage": "https://github.com/NANA7MI0/dsh-purge-go#readme",
+  "bugs": {
+    "url": "https://github.com/NANA7MI0/dsh-purge-go/issues"
+  },
+  "files": [
+    "lib",
+    "assets",
+    "skills",
+    "presets",
+    "patches",
+    "cordis.patch.yml",
+    "NOTICE"
+  ]
 }
