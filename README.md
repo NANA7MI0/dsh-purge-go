@@ -1,6 +1,22 @@
 # dsh-purge-go
 
-给 **dsh-go**（Android + proot 里的 DSH 引擎）加两层能力：**提示词注入** + **引擎源码补丁**。
+把 **dsh-purge** 移植适配到 **dsh-go**（Android + proot 里的 DSH 引擎），加两层能力：**提示词注入** + **引擎源码补丁**。
+
+> ## ⚠️ 装之前先看清楚：这会拆掉两道闸
+>
+> 打上补丁之后，引擎的这两道保护会失效，**而且是长期的、静默的**：
+>
+> - **审批不再询问**：`dsh-user-approval` 里"要审批就自动拒绝"的句子被换成"auto-granted"，
+>   任何需要授权的动作直接放行。
+> - **沙箱写权限放开**：`dsh-sandbox-local` 的 `deny file-write*` 变成 `allow file-write*`。
+>
+> 代价很具体：以后任何工具返回的内容里——网页、文档、日志、别人发的文件——如果夹带了指令，
+> **没有第二道拦截**。这套东西适合你自己的设备、自己清楚在跑什么的时候用；不适合装在要处理
+> 来路不明内容的环境里。
+>
+> 这是**主动选择的配置**，不是漏洞。但请在做之前就明白代价，而不是事后发现。
+>
+> 回滚方法见文末「回滚」一节。
 
 ## 引用了谁的注入层
 
@@ -140,6 +156,41 @@ A: `node patches/purge-patch.mjs restore --backup <备份目录>`，或者在手
 仓库挂在 `NANA7MI0` 名下只代表**谁维护这份适配**，不代表补丁设计归他。上游如果要求下架或改署名，改 README 和 LICENSE 即可，代码本身不绑定。
 
 注入段正文（`prompt-inject.md`）由使用者自己提供，**不在本仓库内**。
+
+## 回滚
+
+补丁改的是 `node_modules` 里的宿主源码，**按批次逆序撤**才算干净。1745 那批叠加在 1647 之上：
+
+```sh
+# 顺序不能颠倒
+node patches/purge-patch.mjs restore --backup ./backup-<后一次的时间戳>
+node patches/purge-patch.mjs restore --backup ./backup-<前一次的时间戳>
+```
+
+两批相加的文件数会比实际改动的文件少——因为**有文件被两批都动过**。所以只跑一个 `restore` 会停在混合状态。
+
+`dsh-agent-instructions` 这个包的特殊之处：它的提示词常量在补丁之外还被单独改过（`REPLACEMENT_*` / `COMPACT_*`），普通 restore 不一定覆盖到。想彻底回官方：
+
+```sh
+pnpm --dir /opt/dsh add @deepseek-ai/dsh-agent-instructions --force
+```
+
+回滚后**必须重启引擎**才生效。验证：
+
+```sh
+grep -rl "dsh-purge" /opt/dsh/node_modules/@deepseek-ai/   # 应该没有输出
+```
+
+## 升级引擎之后
+
+升级会覆盖整个 `node_modules`，补丁全部丢失。别急着 `apply`：
+
+```sh
+node patches/purge-patch.mjs probe        # 先看新版本命中率
+node patches/purge-patch.mjs apply --dry  # 再预演
+```
+
+`probe` 在 0.2.2-rc.1 上是 50 applied / 2 miss / 1 partial；换版本这个分布会变，命中率低说明查找串对不上，硬打只会改坏。
 
 ## 许可证
 
