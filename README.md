@@ -338,22 +338,6 @@ cat $DSH_HOME/dsh-purge/state.json        # 应该有 "enabled": true
 # 在对话里说「跑 purge_status 看看状态」，它会调工具并把结果读给你
 ```
 
-### 本仓库就是 dsh-purge-mini 改了名
-
-\`lib/\` 那 18 个模块**就是 \`dsh-purge-mini\` 的原样代码**（来自 LanJinGod），只把包名和
-\`cordis.patch.yml\` 的 id 从 \`dsh-purge-mini\` 改成 \`dsh-purge-go\`，逻辑一行没动。
-
-所以：**这两个是同一个插件，不要都装**。它们注册的注入段名都是 \`dsh-purge\`，
-同时装会出现两份注入互相覆盖，行为不可预期。
-
-如果你机器上已经装过 mini（\`dsh plugin --profile web list | grep purge\` 能查到），
-**先卸掉再装这个**：
-
-\`\`\`sh
-dsh plugin --profile web remove dsh-purge-mini
-dsh plugin --profile web add <本仓库路径>
-\`\`\`
-
 ---
 
 ## 装好即生效，不需要手动开
