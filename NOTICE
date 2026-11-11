@@ -38,4 +38,6 @@ dsh-purge-go
 运行时说明
 ----------
 
-插件消费的注入正文（$DSH_HOME/prompt-inject.md）由使用者在运行时自行提供，不在本仓库内。
+注入正文的默认版本在仓库内：assets/default-prompt.md（25240 字节，来自 LanJinGod，AGPL-3.0）。
+插件首次加载时会把它落盘到 $DSH_HOME/prompt-inject.md；使用者可以随时用 purge_prompt 或直接编辑
+换成自己的版本，那份自定义内容不属于本仓库。

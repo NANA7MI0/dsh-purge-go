@@ -323,6 +323,34 @@ dsh plugin --profile web add /root/tools/dsh-purge-go
 
 装完**重启引擎**。补丁层不用安装，直接在仓库目录里跑。
 
+### 装完怎么确认生效
+
+重启后开一个新会话（旧会话的 system 已写进历史，顶不动），任选一种确认：
+
+```sh
+# ① 看正文有没有自动落盘
+ls -l $DSH_HOME/prompt-inject.md          # 应该有 25 KB 左右
+
+# ② 看状态文件
+cat $DSH_HOME/dsh-purge/state.json        # 应该有 "enabled": true
+
+# ③ 让 AI 自查（最直接）
+# 在对话里说「跑 purge_status 看看状态」，它会调工具并把结果读给你
+```
+
+### 别和 dsh-purge-mini 同时装
+
+本仓库和 `dsh-purge-mini` 用的是**同一个段名** `dsh-purge`（`lib/assemble.js` 里写死的，
+和桌面版共用同一份注入段）。两个都装会出现两套注入互相覆盖，行为不可预期。
+
+装之前先看看有没有：
+
+```sh
+dsh plugin --profile web list | grep purge
+```
+
+有 mini 就先 `dsh plugin --profile web remove dsh-purge-mini`。
+
 ---
 
 ## 装好即生效，不需要手动开
@@ -364,7 +392,7 @@ if (!isFile(statePath(home))) writeState(home, { enabled: true })  // 状态默�
 ## 打补丁
 
 ```sh
-node patches/purge-patch.mjs probe            # 只读：哪些能打、哪些版本不匹配
+node patches/purge-patch.mjs probe            # 扫描：哪些能打、哪些版本不匹配（会在当前目录写 patch-probe.json）
 node patches/purge-patch.mjs apply --dry      # 预演：会改哪些文件
 node patches/purge-patch.mjs apply            # 真打
 node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
