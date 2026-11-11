@@ -18,7 +18,7 @@
 
 | 加了什么 | 文件 | 做什么 |
 |---|---|---|
-| 82 条补丁定义 | `patches/patches.json` | 从 dsh-purge 导出，重做了 dsh-go 的包名/路径映射 |
+| 86 条补丁定义 | `patches/patches.json` | 从 dsh-purge 社区延续版 1.1.93 导出，重做了 dsh-go 的包名/路径映射 |
 | `probe` | `patches/purge-patch.mjs` | 只读扫描：每条补丁标成 `hit`/`partial`/`applied`/`miss`/`no_pkg`，换引擎版本先看命中率 |
 | `apply` | 同上 | 精确字符串替换，先备份再改，每个 `.js` 改完 `node --check`，语法不过当场还原 |
 | `restore` | 同上 | 按备份 manifest 全量回滚，一条命令 |
@@ -36,8 +36,8 @@
 | 压缩后重发官方弱基线 | 强基线 | 压缩一轮之后不松劲 |
 | rewind 走完整派生链 | 跳过派生 | 回退不被历史重新算一遍 |
 
-`probe` 在 0.2.2-rc.1 上的实测：82 条里 **40 条可打**，落在 **26 个文件**；26 条 `no_pkg`（桌面壳、OAuth、
-preset 那类手机端没有的包），9~12 条 `miss`（0.2.2 改了写法）。
+`probe` 在 0.2.2-rc.1 上的实测：86 条里 **50 条已 applied**，落在 **35 个文件**；29 条 `no_pkg`（桌面壳、OAuth、
+preset 那类手机端没有的包），2 条 `miss`、1 条 `partial`。换引擎版本后这个分布会变，先跑 `probe` 再决定。
 
 ## 环境
 
@@ -99,7 +99,7 @@ node patches/purge-patch.mjs restore --backup ./backup-20261111170000   # 回滚
 
 ## 关键补丁
 
-82 条按层分布：提示词 25 / 代码 46 / 工具 8 / 兼容 3。最要紧的几条：
+86 条覆盖提示词、代码、工具、兼容四类。最要紧的几条：
 
 | id | 名字 | 改什么 |
 |---|---|---|
@@ -132,7 +132,7 @@ A: `node patches/purge-patch.mjs restore --backup <备份目录>`，或者在手
 
 | 部分 | 作者 | 说 明 |
 |---|---|---|
-| `patches/patches.json`（82 条补丁定义） | **dsh-purge 作者**（社区版 `mikamikasuki/dsh-purge`；原 `YuJunZhiXue/dsh-purge` 已 404） | 补丁的查找串/替换串/标记串是原作者设计的，这里只是导出成 JSON |
+| `patches/patches.json`（86 条补丁定义） | **dsh-purge 作者**（数据导出自社区延续版 [`2200176074/dsh-purge`](https://github.com/2200176074/dsh-purge) 1.1.93；上游 `YuJunZhiXue/dsh-purge`、`HunYiSage/dsh-purge` 均已 404） | 补丁的查找串/替换串/标记串是原作者设计的，这里只是导出成 JSON 并重映射包名 |
 | `patches/purge-patch.mjs` | 本仓库 | 执行器：探测 / 应用 / 回滚 / 语法校验，为重写部分 |
 | `lib/index.js`（注入层插件） | 本仓库 | 注入层思路来自 [LanJinGod/dsh-purge-go](https://github.com/LanJinGod/dsh-purge-go)（AGPL-3.0），这里是精简移植 + dsh-go 的 Cordis 装配适配 |
 | `README.md`、打包、dsh-go 包名映射 | 本仓库 | 适配层 |
