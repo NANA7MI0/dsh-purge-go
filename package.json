@@ -15,5 +15,8 @@
       "patch": "./cordis.patch.yml"
     }
   },
-  "license": "AGPL-3.0"
+  "license": "AGPL-3.0",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
 }
