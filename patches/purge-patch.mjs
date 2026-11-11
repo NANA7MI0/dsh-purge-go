@@ -147,17 +147,24 @@ function tally(rows) {
 }
 
 function restoreScript(root) {
+  // ROOT 不写死：优先环境变量 DSH_AI_ROOT，其次第一个参数，最后回落到生成时的路径。
   const lines = [
     "#!/bin/sh",
     "set -e",
-    "D=\"$(dirname \"$0\")\"",
-    "ROOT=" + root,
-    "cd \"$D/files\"",
-    "find . -type f | while read -r f; do cp -f \"$f\" \"$ROOT/$f\"; done",
-    "echo restored",
+    'D="$(dirname "$0")"',
+'ROOT="${DSH_AI_ROOT:-${1:-' + root + '}}"',
+    'if [ ! -d "$ROOT" ]; then',
+    '  echo "engine package dir not found: $ROOT" >&2',
+    '  echo "usage: DSH_AI_ROOT=/path/to/@deepseek-ai sh $0" >&2',
+    "  exit 1",
+    "fi",
+    'cd "$D/files"',
+    'find . -type f | while read -r f; do cp -f "$f" "$ROOT/$f"; done',
+    'echo "restored into $ROOT"',
   ];
   return lines.join("\n") + "\n";
 }
+
 
 function apply(root, backupDir, dry) {
   const rows = probe(root);
