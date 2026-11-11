@@ -1,7 +1,7 @@
 {
   "name": "dsh-purge-go",
-  "version": "0.3.0",
-  "description": "把 dsh-purge 移植适配到 dsh-go：提示词注入层（LanJinGod 实现）+ 86 条引擎源码补丁",
+  "version": "0.3.1",
+  "description": "把 dsh-purge 移植适配到 dsh-go：提示词注入层（LanJinGod 实现）+ 87 条引擎源码补丁",
   "type": "module",
   "main": "lib/index.js",
   "exports": {

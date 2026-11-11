@@ -3,7 +3,7 @@
 把 **dsh-purge** 移植适配到 **dsh-go**（Android + proot 里的 DSH 引擎）。
 
 两层：**注入层**直接引用 [LanJinGod/dsh-purge-go](https://github.com/LanJinGod/dsh-purge-go)，
-**补丁层**是本仓库独立实现的 86 条引擎源码补丁。
+**补丁层**是本仓库独立实现的 87 条引擎源码补丁。
 
 > ### ⚠️ 装之前先看清楚
 >
@@ -176,7 +176,7 @@ case "read-only":
 
 ## 定位：只保留核心破甲，桌面版其余功能全部放弃
 
-原版 `2200176074/dsh-purge` 是**桌面版**，总共 60 个 js 文件、光 `client.js` 就 540 KB，
+原版 `kingcharleslzy-ai/dsh-purge`（社区维护版，★6966）是**桌面版**，总共 60 个 js 文件、光 `client.js` 就 540 KB，
 `core.js` 366 KB、`desktop.js` 82 KB。它包含一整套桌面宿主适配。
 
 本仓库**只取其中跟「破甲」直接相关的两件事**，其余全部抛弃：
@@ -353,7 +353,7 @@ node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
 
 ## 关键补丁
 
-86 条覆盖提示词、代码、工具、兼容四类。最要紧的：
+87 条覆盖提示词、代码、工具、兼容四类。最要紧的：
 
 | id | 名字 | 改什么 |
 |---|---|---|
@@ -367,13 +367,13 @@ node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
 
 ## 和桌面版 dsh-purge 的差别
 
-| 项 | 桌面版 `2200176074/dsh-purge` | 本仓库 |
+| 项 | 桌面版 `kingcharleslzy-ai/dsh-purge` | 本仓库 |
 |---|---|---|
 | 目标 | PC 上的 DSH | dsh-go |
 | 注入方式 | 自带 `core.js`（366 KB），正则逐句改写 + `defineProperty` 劫持 | 官方 waterfall 整段丢弃 |
 | 补丁 | 自带 | 导成 JSON + 独立执行器 |
 | 桌面功能 | asar 解包、计划任务 | 无 |
-| 许可 | 未标注 | AGPL-3.0 |
+| 许可 | MIT（社区版） | AGPL-3.0（因注入层是 AGPL） |
 
 ---
 
@@ -467,7 +467,7 @@ lib/          注入层 18 个模块（来自 LanJinGod）
 assets/       categories.json / default-prompt.md / net-scope-ranges.json
 skills/redteam/   23 个红队技能
 presets/redteam/  红队预设
-patches/      patches.json（86 条）+ purge-patch.mjs（执行器）
+patches/      patches.json（87 条）+ purge-patch.mjs（执行器）
 scripts/      engine-smoke / kit-check / build-selfinstall
 cordis.patch.yml  插件插入声明
 ```
@@ -481,7 +481,7 @@ cordis.patch.yml  插件插入声明
 | 部分 | 作者 |
 |---|---|
 | `lib/`、`assets/`、`skills/redteam/`、`presets/` | [LanJinGod/dsh-purge-go](https://github.com/LanJinGod/dsh-purge-go)，直接引用，本仓库只做 dsh-go 侧路径适配 |
-| `patches/patches.json` | dsh-purge 作者（数据导出自 [2200176074/dsh-purge](https://github.com/2200176074/dsh-purge) 1.1.93） |
+| `patches/patches.json` | dsh-purge 社区维护版作者 小杨 / YuJunZhiXue（数据导出自 [kingcharleslzy-ai/dsh-purge](https://github.com/kingcharleslzy-ai/dsh-purge) v1.6.93，MIT） |
 | `patches/purge-patch.mjs`、README、包名映射 | 本仓库 |
 
 仓库挂在 `NANA7MI0` 名下只代表谁维护这份适配，不代表注入层或补丁设计归他。
@@ -491,6 +491,14 @@ cordis.patch.yml  插件插入声明
 ---
 
 ## 更新日志
+
+### 0.3.1
+
+- 补入社区维护版 v1.6.93 的 **#91 `BROWSER_COOKIE_NAME_IGNORE_PORT`**：会话 cookie 名忽略端口，
+  避免随机端口累积 cookie 撑爆请求头触发 431。补丁总数 86 → **87**。
+- 来源标注更正：补丁数据出自 [kingcharleslzy-ai/dsh-purge](https://github.com/kingcharleslzy-ai/dsh-purge)（★6966，MIT），
+  不是此前标注的转发仓库。
+- NOTICE 重写：分列三部分来源与各自许可，说明整仓为何是 AGPL-3.0。
 
 ### 0.3.0
 
@@ -506,7 +514,7 @@ cordis.patch.yml  插件插入声明
 
 ### 0.2.0
 
-补丁层加 86 条定义和 `probe` / `apply` / `restore` 执行器。
+补丁层加 86 条定义和 `probe` / `apply` / `restore` 执行器。（0.3.1 起增至 87 条，见下）
 
 ### 0.1.0
 

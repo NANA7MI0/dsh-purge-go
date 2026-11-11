@@ -1,20 +1,41 @@
 dsh-purge-go
 ============
 
-This distribution combines two portions with separate authorship:
+本发行版合并了两部分来源不同的内容：
 
-1. patches/patches.json -- patch definitions (patterns, replacements, markers)
-   Exported from the dsh-purge project.
-   Community fork: https://github.com/mikamikasuki/dsh-purge
-   Original project: https://github.com/YuJunZhiXue/dsh-purge (no longer available)
-   Copyright (c) dsh-purge authors. Licensed under the terms of that project.
+1. lib/、assets/、skills/redteam/、presets/redteam/ —— 提示词注入层
+   来自 LanJinGod/dsh-purge-go
+   https://github.com/LanJinGod/dsh-purge-go
+   Copyright (c) LanJinGod。AGPL-3.0。
+   本仓库只做 dsh-go 侧的路径与包名适配。
 
-2. Everything else -- dsh-go adaptation layer
-   lib/index.js, patches/purge-patch.mjs, cordis.patch.yml, README.md, packaging.
-   Copyright (c) 2026 NANA7MI0. MIT, see LICENSE.
+2. patches/patches.json —— 引擎补丁定义（pattern / replace / markers）
+   导出自 dsh-purge 社区维护版 kingcharleslzy-ai/dsh-purge
+   https://github.com/kingcharleslzy-ai/dsh-purge
+   社区版作者：小杨 / YuJunZhiXue（上游 YuJunZhiXue/dsh-purge 已不可访问）
+   Copyright (c) 2026 小杨。MIT。
+   本次导出基于 v1.6.93，共 87 条（原 86 条 + 自社区版补入的 #91）。
 
-Repository ownership (NANA7MI0) means maintainer of the adaptation layer only.
-It does not assert authorship of the patch definitions in patches/patches.json.
+3. 其余部分 —— dsh-go 适配层
+   patches/purge-patch.mjs（probe / apply / restore 执行器）、cordis.patch.yml、
+   package.json、README.md、打包脚本。
+   Copyright (c) 2026 NANA7MI0。
 
-The operator prompt text consumed by the plugin ($DSH_HOME/prompt-inject.md) is
-supplied by the user at runtime and is not part of this repository.
+许可证
+------
+
+整个仓库以 AGPL-3.0 发布，见 LICENSE。
+
+原因：第 1 部分（注入层）是 AGPL-3.0，按该许可证的传染性，整仓随之适用 AGPL-3.0。
+第 2、3 部分本身是 MIT（补丁定义）与 MIT（适配层），但在本仓库中一并按 AGPL-3.0 分发。
+如果你只需要补丁层，那部分是独立编写的数据与执行器，可以单独取用。
+
+仓库归属
+--------
+
+仓库挂在 NANA7MI0 名下，只代表维护这份 dsh-go 适配，不代表拥有注入层或补丁设计的著作权。
+
+运行时说明
+----------
+
+插件消费的注入正文（$DSH_HOME/prompt-inject.md）由使用者在运行时自行提供，不在本仓库内。
