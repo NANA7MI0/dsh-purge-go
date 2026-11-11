@@ -260,7 +260,7 @@ window.__ModuleLoader__.load({ id: "dsh-purge", factory: (require) => {
 
 **③ 红队预设是空壳**
 
-预设的 `agent.cordis.yml` 要求 AI 调用 13 个工具：
+预设的 `agent.cordis.yml` 要求 AI 调用 16 个工具（下面只列主要的几个）：
 
 ```
 redteam_preflight      redteam_agent_slot     redteam_engagement_open
@@ -616,7 +616,7 @@ assets/           categories.json / default-prompt.md / net-scope-ranges.json
 skills/redteam/   23 个红队技能（md）
 presets/redteam/  红队预设（3 个文件）
 patches/          patches.json（87 条）+ purge-patch.mjs（probe / apply / restore 执行器）
-scripts/          engine-smoke.mjs（段注册与 assemble 重排验证）· kit-check.mjs（插件规范检查）
+scripts/          engine-smoke.mjs（段注册与 assemble 重排验证）· kit-check.mjs（插件规范检查，需外部 plugin-kit）
 test/             7 组共 56 项测试
 cordis.patch.yml  插件插入声明
 package.json      清单（name / version / engines.dsh / dsh.bundle.patch）
