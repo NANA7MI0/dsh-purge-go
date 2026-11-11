@@ -322,6 +322,25 @@ EOF
 
 ---
 
+## 5 个操作工具
+
+装好插件之后，对话里会多出五个工具。**这是日常操作的主要入口**，不用记命令：
+
+| 工具 | 干什么 |
+|---|---|
+| `purge_status` | 看注入状态：开关、正文来源与体积、当前变体、按模型指定、上次组装时压掉了哪些官方段 |
+| `purge_apply` | 开启破甲，并确保 `$DSH_HOME/prompt-inject.md` 有正文（缺就落盘包内默认正文）。`force=true` 覆盖重写 |
+| `purge_revert` | 关闭破甲，把当前正文备份到 `dsh-purge/backups/`（正文本身保留） |
+| `purge_prompt` | 读写注入正文与变体。`show` / `set` / `reset` / `use` / `default` / `map`（按模型指定变体） |
+| `purge_category` | 题材分类扩展层。`list` / `add` / `rm` / `on` / `off` / `reset` / `bake` |
+
+**它们管的是注入层，不管补丁。** 补丁（`patches.json` 那 87 条）走另一条路，见下一节。
+
+所以如果你想「让 AI 帮我开破甲」——直接说就行，它会调 `purge_apply`；
+想「把注入正文换成我自己写的」——用 `purge_prompt` 的 `set`。
+
+---
+
 ## 打补丁
 
 ```sh
