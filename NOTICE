@@ -14,7 +14,7 @@ dsh-purge-go
    https://github.com/kingcharleslzy-ai/dsh-purge
    社区版作者：小杨 / YuJunZhiXue（上游 YuJunZhiXue/dsh-purge 已不可访问）
    Copyright (c) 2026 小杨。MIT。
-   本次导出基于 v1.6.93，共 87 条（原 86 条 + 自社区版补入的 #91）。
+   本次导出基于 v1.6.93。社区版 lib/patches/ 里是 83 条（27 提示词 + 44 代码 + 9 工具 + 3 其他）；较早的 2200176074 转发版是 86 条；本仓库 87 条 = 86 + 补入的 #91。差额的 3 条是 layer 标为「0.1.5 兼容」和「0.2.0 兼容」的条目，社区版已并入其他分组。
 
 3. 其余部分 —— dsh-go 适配层
    patches/purge-patch.mjs（probe / apply / restore 执行器）、cordis.patch.yml、
