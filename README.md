@@ -303,40 +303,85 @@ redteam_vuln_query
 | 引擎路径 | `/opt/dsh`，包目录 `node_modules/@deepseek-ai` |
 | 宿主 | Android，proot 内 Ubuntu，**不需要 root** |
 | Node | 20+（用到 `node --check` 和 ESM） |
-| 依赖 | 零运行时依赖，只用 Node 内置模块 |
-| 体积 | 约 830 KB（assets 里 250 KB 是 IP 段表） |
+| **包管理器** | **pnpm**（`dsh plugin` 底层就是调 pnpm，缺了会报 `dsh: pnpm was not found`） |
+| 运行时依赖 | 零。插件本身只用 Node 内置模块 |
+| 体积 | 64 个文件 / 0.84 MB（assets 里 250 KB 是 IP 段表） |
 
-别的引擎版本先跑 `probe`，别直接 `apply`。
+**引擎版本边界**：`package.json` 里写的是 `engines.dsh: ">=0.2.1-rc.2 <0.3.0"`。
+引擎升到 0.3.x 之后 `dsh plugin add` 会**直接拒绝安装**：
+
+```
+dsh: installation rejected: Plugin ... is incompatible with dsh 0.3.x
+dsh: nothing was installed.
+```
+
+真要试就加 `--allow-version`（`dsh plugin --profile web allow-version dsh-purge-go`），
+但补丁层的查找串大概率对不上，先跑 `probe` 看命中率。
+
+别的引擎版本也是同理：**先 `probe`，别直接 `apply`**。
 
 ---
 
 ## 安装
 
 ```sh
+mkdir -p /root/tools
 git clone https://github.com/NANA7MI0/dsh-purge-go /root/tools/dsh-purge-go
 dsh plugin --profile web add /root/tools/dsh-purge-go
 ```
+
+装到别的位置也行，把第二条命令的路径换掉即可。
+
+**两个常见失败**：
+
+- `destination path already exists` —— `/root/tools/dsh-purge-go` 已经被占了（可能放了别的东西）。
+  换个名字：`git clone ... /root/tools/dsh-purge-go2`，后面路径跟着改。
+- `could not read Username for 'https://github.com'` —— 大概率是 **GitHub 限流**（429），
+  不是仓库私有。换 tar 包：
+
+  ```sh
+  curl -L https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main | tar xz
+  mv dsh-purge-go-main /root/tools/dsh-purge-go
+  ```
 
 **不用手动准备注入正文**——插件首次加载时会自动把包内默认正文（25 KB）落盘到
 `$DSH_HOME/prompt-inject.md`，并默认开启。想换成自己写的，装好之后用 `purge_prompt` 的 `set`
 或直接编辑那个文件都行。
 
-装完**重启引擎**。补丁层不用安装，直接在仓库目录里跑。
+装完**重启引擎**。补丁层不用安装，但要 **`cd` 进仓库目录再跑**——执行器用的是相对路径，
+在别处跑会报 `Cannot find module`。
 
 ### 装完怎么确认生效
 
 重启后开一个新会话（旧会话的 system 已写进历史，顶不动），任选一种确认：
 
 ```sh
-# ① 看正文有没有自动落盘
-ls -l $DSH_HOME/prompt-inject.md          # 应该有 25 KB 左右
+# ① 看正文有没有自动落盘（约 26 KB，比 assets 里那份大——会拼上题材分类扩展）
+ls -l ~/.dsh/prompt-inject.md
 
 # ② 看状态文件
-cat $DSH_HOME/dsh-purge/state.json        # 应该有 "enabled": true
+cat ~/.dsh/dsh-purge/state.json            # 应该有 "enabled": true
+```
 
-# ③ 让 AI 自查（最直接）
+> **注意别用 `$DSH_HOME`**：那个变量只在引擎进程里才有值，你手敲 shell 时是空的，
+> `ls -l $DSH_HOME/...` 会变成 `ls -l /prompt-inject.md` 然后报 No such file。
+> 默认位置就是 `~/.dsh`；如果你改过 `DSH_HOME`，把它换成实际路径即可。
+
+```sh
+# ③ 让 AI 自查（最稳的一条）
 # 在对话里说「跑 purge_status 看看状态」，它会调工具并把结果读给你
 ```
+
+### 怎么重启引擎
+
+Android 上没有服务管理，直接杀掉 App 进程再打开就行：
+
+```sh
+am force-stop io.github.ccch1mneyyy.dsh_app
+```
+
+或者手动：最近任务里把 App 划掉，再点图标打开。**光退出界面不算重启**，
+引擎进程还在内存里跑着，插件不会重新加载。
 
 ---
 
@@ -554,7 +599,39 @@ node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
 
 ---
 
-## 回滚
+## 卸载插件
+
+先关掉注入，再摘插件：
+
+```sh
+# ① 关破甲（正文会备份到 ~/.dsh/dsh-purge/backups/）
+#    在对话里让 AI 跑 purge_revert，或者直接删 state.json 里的开关
+
+# ② 从 profile 里摘掉
+dsh plugin --profile web remove dsh-purge-go
+```
+
+**这条命令只摘注册，不删文件。** 实测残留：
+
+| 残留 | 在哪 | 要不要删 |
+|---|---|---|
+| `node_modules/dsh-purge-go` 软链 | `~/.dsh/profiles/web/` | 可以留着，无害 |
+| `prompt-inject.md` | `~/.dsh/` | **想彻底清就删**，留着也不会生效 |
+| `dsh-purge/`（state、备份） | `~/.dsh/` | 想重装恢复状态就留着 |
+| `redteam/`（23 个技能 md） | `~/.dsh/` | 同上 |
+
+要连文件一起清：
+
+```sh
+rm -rf ~/.dsh/prompt-inject.md ~/.dsh/dsh-purge ~/.dsh/redteam
+rm -rf ~/.dsh/profiles/web/node_modules/dsh-purge-go
+```
+
+**卸完要重启引擎**，否则跑着的进程里插件还在。
+
+---
+
+## 回滚补丁
 
 补丁**按批次逆序撤**才算干净（后打的先撤）：
 

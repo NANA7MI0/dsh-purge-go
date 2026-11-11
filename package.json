@@ -38,6 +38,8 @@
     "presets",
     "patches",
     "cordis.patch.yml",
-    "NOTICE"
+    "LICENSE",
+    "NOTICE",
+    "README.md"
   ]
 }
