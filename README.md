@@ -1,5 +1,19 @@
 # dsh-purge-go
 
+> ## 同一领域的另一个实现
+>
+> [LanJinGod/dsh-purge-go](https://github.com/LanJinGod/dsh-purge-go) 覆盖同一件事的注入侧：提示词注入内核、
+> 身份段丢弃（`harness:identity` / `deployment:persona-prefix` / `deployment:persona-suffix`）、地区门、
+> 拒答续跑、目标卡、题材分类扩展层、红队技能与预设、原生面板与命令，零运行时依赖，不修改引擎文件。
+> 需求集中在注入侧的话，可以先看它。
+>
+> 两个仓库的分工：**注入侧在本仓库 `lib/`，引擎源码补丁侧在 `patches/`。**
+> `patches/` 处理的是宿主代码里写死的行为——比如审批请求的默认结论
+> （`Approval prompts are disabled in this session: actions that require approval are rejected automatically`）——
+> 做法是对 `@deepseek-ai/*` 做字符串替换，与是否使用注入侧无关，两条路可以分别选。
+>
+> 许可证：本仓库 MIT；LanJinGod/dsh-purge-go 为 AGPL-3.0，同时使用前请确认兼容。
+
 把 [dsh-purge](https://github.com/mikamikasuki/dsh-purge) 的破甲能力搬到 **dsh-go 手机版**（Android + proot 里的 DSH 引擎）上。
 原版面向 Desktop Electron / CLI，依赖 `app.asar` 解包、主进程重启、桌面壳窗口——这些在手机上全都不存在，所以这里重写成两层：
 
