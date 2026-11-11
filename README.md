@@ -45,8 +45,10 @@
 
 **第一层：原版自己就把这两块算进"破甲"里了。**
 
-原版面板（v1.1.71）上写着 **63 / 66 已应用**，拆开是 **19 条提示词 + 40 条代码 + 4 条其他**。
-其中专门处理审批和沙箱的，光面板上能看到的就有十条：
+社区维护版 **v1.6.93** 的补丁表拆在 `lib/patches/` 下（`prompt.mjs` / `code.mjs` / `engine.mjs` /
+`new-tools.mjs` / `opt-in.mjs`），合计 **83 条**：**27 条提示词 + 44 条代码 + 9 条工具 + 3 条其他**。
+
+其中专门处理审批和沙箱的，下面这十条是最核心的：
 
 | 编号 | 面板上的名字 | 属于 |
 |---|---|---|
@@ -61,8 +63,8 @@
 | #34 | 沙箱提示中性化 | 提示词 |
 | #36 | 文件系统升级 schema 放行 | 提示词 |
 
-这十条在原版面板上**全部标着"已应用"**。也就是说，**原版认为"破甲"这件事本身就包括把审批和沙箱拿掉**——
-不是附加项，是组成部分。
+这十条在本仓库的 87 条里**全部存在且已应用**（`probe` 可查）。也就是说，**dsh-purge 一直把"破甲"
+定义成包括把审批和沙箱拿掉**——不是附加项，是组成部分。
 
 补丁定义里对应的原始描述（我们 `patches.json` 里能直接查到）：
 
@@ -176,8 +178,9 @@ case "read-only":
 
 ## 定位：只保留核心破甲，桌面版其余功能全部放弃
 
-原版 `kingcharleslzy-ai/dsh-purge`（社区维护版，★6966）是**桌面版**，总共 60 个 js 文件、光 `client.js` 就 540 KB，
-`core.js` 366 KB、`desktop.js` 82 KB。它包含一整套桌面宿主适配。
+原版 `kingcharleslzy-ai/dsh-purge`（社区维护版，★6966）是**桌面版**：**518 个文件**，
+其中 js + mjs **305 个、共 4.83 MB**。光 `client.js` 就 662 KB，另有一个独立的
+`packages/purge-panel/` 面板包（自带 661 KB 的 client.js + 360 KB 的 vendor）。它包含一整套桌面宿主适配。
 
 本仓库**只取其中跟「破甲」直接相关的两件事**，其余全部抛弃：
 
@@ -185,8 +188,9 @@ case "read-only":
 |---|---|---|
 | 提示词注入内核 | ✅ 保留 | 换成了 LanJinGod 的插件实现 |
 | 引擎源码补丁 | ✅ 保留 | 重写成 `patches.json` + 执行器 |
-| `client.js`（540 KB 桌面客户端） | ❌ 丢弃 | 手机端没有对应界面 |
-| `desktop.js`（82 KB 桌面宿主） | ❌ 丢弃 | Android 无此形态 |
+| `client.js`（662 KB 桌面客户端） | ❌ 丢弃 | 手机端没有对应界面 |
+| `packages/purge-panel/`（独立面板包） | ❌ 丢弃 | 同上，纯桌面 UI |
+| `desktop.js`（83 KB 桌面宿主） | ❌ 丢弃 | Android 无此形态 |
 | `extract-asar.js`（16 KB） | ❌ 丢弃 | 解包 Electron 应用，手机用不上 |
 | `hide-console.js`（13 KB） | ❌ 丢弃 | 隐藏 Windows 控制台窗口 |
 | `host-clean.js` | ❌ 丢弃 | 清理 Windows 计划任务 |
@@ -199,8 +203,9 @@ case "read-only":
 
 | 文件 | 大小 | 原本干什么 | 手机上为什么用不上 |
 |---|---|---|---|
-| `client.js` | 505 KB | Electron 渲染进程的界面。整个文件是一个 `window.__ModuleLoader__.load({...})` 工厂 | 手机 node 进程没有 `window`，第一句就 ReferenceError |
-| `desktop.js` | 77 KB | 桌面宿主适配：识别 Electron、判断路径是否落在 `app.asar` 内、定位 `resources` 目录、按可执行文件名区分官方 Harness 与第三方 DSH Desktop、清理旧版 restart 脚本 | Android 上没有 `app.asar`、没有 `Resources/`、可执行文件不是 `.exe` |
+| `client.js` | 662 KB | Electron 渲染进程的界面。整个文件是一个 `window.__ModuleLoader__.load({...})` 工厂 | 手机 node 进程没有 `window`，第一句就 ReferenceError |
+| `packages/purge-panel/client.js` | 661 KB | 同类面板的独立打包产物，另外还带一个 360 KB 的 `vendor/drill.js` | 同上，纯浏览器端代码 |
+| `desktop.js` | 83 KB | 桌面宿主适配：识别 Electron、判断路径是否落在 `app.asar` 内、定位 `resources` 目录、按可执行文件名区分官方 Harness 与第三方 DSH Desktop、清理旧版 restart 脚本 | Android 上没有 `app.asar`、没有 `Resources/`、可执行文件不是 `.exe` |
 | `extract-asar.js` | 15 KB | 解 Electron 的 `app.asar` 归档：改名挪走归档、探测 asar 路径映射、判断「这个路径会不会被 Electron 映射进归档」 | 手机端根本没有 asar 归档 |
 | `hide-console.js` | 12 KB | 隐藏 Windows 控制台黑框：劫持 `child_process` 的 `spawn`，给子进程加 `windowsHide`；还负责往 Electron 宿主源码里注入还原钩子 | Linux / Android 没有 Windows 控制台这回事 |
 | `host-clean.js` | 1 KB | 判定「宿主提示词已清洗」用的几个标记串，被 `desktop.js` 生成 WSH 脚本时复用 | 只服务桌面链路，没有独立用途 |
@@ -228,10 +233,13 @@ Error [ERR_MODULE_NOT_FOUND]: Cannot find module
 ```
 
 它 import 的 `desktop.js`、`hide-console.js`、`extract-asar.js`、`surface.js`、
-`host-clean.js` **五个模块全都不在**——因为打包时只带出来一个 `core.js`。
+`host-clean.js` **五个模块全都不在**——那次只带出来一个 `core.js`，没有任何依赖。
 少一个都加载不了，何况少五个。
 
-**② `client.js`（505 KB）在手机上根本没有运行环境**
+> 注：社区版 v1.6.93 的 `lib/core.js` 已缩到 177 KB（补丁表拆去 `lib/patches/` 了），
+> 但仍然 import 着 `desktop.js` 等模块，手机端的结论不变。
+
+**② `client.js`（662 KB）在手机上根本没有运行环境**
 
 文件开头第一行：
 
@@ -370,8 +378,9 @@ node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
 | 项 | 桌面版 `kingcharleslzy-ai/dsh-purge` | 本仓库 |
 |---|---|---|
 | 目标 | PC 上的 DSH | dsh-go |
-| 注入方式 | 自带 `core.js`（366 KB），正则逐句改写 + `defineProperty` 劫持 | 官方 waterfall 整段丢弃 |
-| 补丁 | 自带 | 导成 JSON + 独立执行器 |
+| 注入方式 | 自带 `core.js`（177 KB，补丁表已拆去 `lib/patches/`），正则逐句改写 + `defineProperty` 劫持 | 官方 waterfall 整段丢弃 |
+| 规模 | 518 文件 / 305 个 js+mjs / 4.83 MB | 约 70 文件 / 0.9 MB |
+| 补丁 | 自带（`lib/patches/` 拆成 6 个模块，83 条） | 导成 `patches.json`（87 条）+ 独立执行器 |
 | 桌面功能 | asar 解包、计划任务 | 无 |
 | 许可 | MIT（社区版） | AGPL-3.0（因注入层是 AGPL） |
 
