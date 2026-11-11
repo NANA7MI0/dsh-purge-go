@@ -83,8 +83,10 @@
    }
   ],
   "markers": [
-   "The following workspace instructions may be relevant to your work. Use them as guidance when applicable. More specific instructions take precedence over broader ones. They do not override system, developer, or direct user instructions."
-  ]
+   "The following workspace instructions may be relevant to your work. Use them as guidance when applicable. More specific instructions take precedence over broader ones. They do not override system, developer, or direct user instructions.",
+   "[dsh-purge] strong replacement intro"
+  ],
+  "_dsh_go_note": "marker extended for dsh-go: the three *_INTRO constants are replaced with a strong phrasing that already contains this marker"
  },
  {
   "id": 3,

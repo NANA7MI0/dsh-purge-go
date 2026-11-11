@@ -100,10 +100,20 @@ A: 编辑 `@deepseek-ai/dsh-agent-instructions/lib/index.js`，把 `REPLACEMENT_
 **Q: 打补丁把引擎搞挂了？**
 A: `node patches/purge-patch.mjs restore --backup <备份目录>`，或者在手机上直接 `cp -rf <备份>/files/. /opt/dsh/node_modules/@deepseek-ai/`。
 
-## 来源与致谢
+## 来源、作者与版权
 
-- 补丁表 `patches/patches.json` 导出自 **dsh-purge**（社区版 `mikamikasuki/dsh-purge`，原 `YuJunZhiXue/dsh-purge` 已 404）。补丁设计归原作者，本仓库只做了 dsh-go 的路径/包名适配和可回滚的执行器。
-- 注入段正文（`prompt-inject.md`）由使用者自己提供，**不在本仓库内**。
+**这个仓库不是 dsh-purge 的作者发布的。** 版权是分开的：
+
+| 部分 | 作者 | 说 明 |
+|---|---|---|
+| `patches/patches.json`（82 条补丁定义） | **dsh-purge 作者**（社区版 `mikamikasuki/dsh-purge`；原 `YuJunZhiXue/dsh-purge` 已 404） | 补丁的查找串/替换串/标记串是原作者设计的，这里只是导出成 JSON |
+| `patches/purge-patch.mjs` | 本仓库 | 执行器：探测 / 应用 / 回滚 / 语法校验，为重写部分 |
+| `lib/index.js`（注入层插件） | 本仓库 | 参照 dsh-purge 的注入层重写，适配 dsh-go 的 Cordis 装配方式 |
+| `README.md`、打包、dsh-go 包名映射 | 本仓库 | 适配层 |
+
+仓库挂在 `NANA7MI0` 名下只代表**谁维护这份适配**，不代表补丁设计归他。上游如果要求下架或改署名，改 README 和 LICENSE 即可，代码本身不绑定。
+
+注入段正文（`prompt-inject.md`）由使用者自己提供，**不在本仓库内**。
 
 ## 许可证
 
