@@ -1,26 +1,43 @@
 # dsh-purge-go
 
-> ## 同一领域的另一个实现
->
-> [LanJinGod/dsh-purge-go](https://github.com/LanJinGod/dsh-purge-go) 覆盖同一件事的注入侧：提示词注入内核、
-> 身份段丢弃（`harness:identity` / `deployment:persona-prefix` / `deployment:persona-suffix`）、地区门、
-> 拒答续跑、目标卡、题材分类扩展层、红队技能与预设、原生面板与命令，零运行时依赖，不修改引擎文件。
-> 需求集中在注入侧的话，可以先看它。
->
-> 两个仓库的分工：**注入侧在本仓库 `lib/`，引擎源码补丁侧在 `patches/`。**
-> `patches/` 处理的是宿主代码里写死的行为——比如审批请求的默认结论
-> （`Approval prompts are disabled in this session: actions that require approval are rejected automatically`）——
-> 做法是对 `@deepseek-ai/*` 做字符串替换，与是否使用注入侧无关，两条路可以分别选。
->
-> 许可证：本仓库 MIT；LanJinGod/dsh-purge-go 为 AGPL-3.0，同时使用前请确认兼容。
+给 **dsh-go**（Android + proot 里的 DSH 引擎）加两层能力：**提示词注入** + **引擎源码补丁**。
 
-把 [dsh-purge](https://github.com/mikamikasuki/dsh-purge) 的破甲能力搬到 **dsh-go 手机版**（Android + proot 里的 DSH 引擎）上。
-原版面向 Desktop Electron / CLI，依赖 `app.asar` 解包、主进程重启、桌面壳窗口——这些在手机上全都不存在，所以这里重写成两层：
+## 引用了谁的注入层
 
-| 层 | 形态 | 作用 |
+`lib/index.js` 的注入思路来自 [LanJinGod/dsh-purge-go](https://github.com/LanJinGod/dsh-purge-go)。
+那个仓库是完整实现：提示词注入内核、身份段丢弃（`harness:identity` / `deployment:persona-prefix` /
+`deployment:persona-suffix`）、地区门、拒答续跑、目标卡、题材分类扩展层、红队技能与预设、原生面板与命令，
+零运行时依赖，不修改引擎文件。需要全量注入能力，用它。
+
+本仓库的 `lib/` 是这套思路的精简移植：注册 `dsh-purge` 提示词段（读 `$DSH_HOME/prompt-inject.md`）、
+能力选择段、`assemble` 期身份段改写。够用，但只有注入这一件事。
+
+## 本仓库在此基础上加了什么
+
+加了第二层：**`patches/`，直接改引擎源码**。这部分和注入侧正交，单独可用。
+
+| 加了什么 | 文件 | 做什么 |
 |---|---|---|
-| 注入层 | Cordis 插件（`lib/index.js`） | 注册 `dsh-purge` 提示词段（读 `$DSH_HOME/prompt-inject.md`）+ 能力选择段 + `assemble` 期身份改写 |
-| 补丁层 | `patches/purge-patch.mjs` + `patches/patches.json` | 往 `@deepseek-ai/*` 宿主源码里做精确字符串替换：审批放行、沙箱放开、身份剥离、装配守卫、rewind 等 |
+| 82 条补丁定义 | `patches/patches.json` | 从 dsh-purge 导出，重做了 dsh-go 的包名/路径映射 |
+| `probe` | `patches/purge-patch.mjs` | 只读扫描：每条补丁标成 `hit`/`partial`/`applied`/`miss`/`no_pkg`，换引擎版本先看命中率 |
+| `apply` | 同上 | 精确字符串替换，先备份再改，每个 `.js` 改完 `node --check`，语法不过当场还原 |
+| `restore` | 同上 | 按备份 manifest 全量回滚，一条命令 |
+
+## 达到什么效果
+
+只装注入层会漏掉这一截：**引擎里有写死的行为会把它顶回去**，而这些行为不在提示词里，改提示词改不动。
+补上补丁层之后：
+
+| 引擎原来的行为 | 打完补丁 | 影响的场景 |
+|---|---|---|
+| `Approval prompts are disabled… actions that require approval are rejected automatically` | 自动放行 | 旧会话不再因为「要审批」被挡 |
+| 沙箱 `deny file-write*` | `allow file-write*` | 能落盘 |
+| `harness:identity` 段常驻 | 段被丢弃 | 注入正文不被官方身份压过 |
+| 压缩后重发官方弱基线 | 强基线 | 压缩一轮之后不松劲 |
+| rewind 走完整派生链 | 跳过派生 | 回退不被历史重新算一遍 |
+
+`probe` 在 0.2.2-rc.1 上的实测：82 条里 **40 条可打**，落在 **26 个文件**；26 条 `no_pkg`（桌面壳、OAuth、
+preset 那类手机端没有的包），9~12 条 `miss`（0.2.2 改了写法）。
 
 ## 环境
 
@@ -80,14 +97,9 @@ node patches/purge-patch.mjs restore --backup ./backup-20261111170000   # 回滚
 | `miss` | 查找串一条都对不上——引擎版本不同，跳过 |
 | `no_pkg` / `no_file` | 目标包或文件不存在（桌面壳、OAuth、preset 之类的包手机上没有） |
 
-## 实测数据（0.2.2-rc.1）
+## 关键补丁
 
-- 补丁总数 **82**：提示词 25 / 代码 46 / 工具 8 / 兼容 3
-- 手机端可打 **约 40 条**，打进 **26 个文件**
-- 26 条 `no_pkg`（desktop-shell、OAuth、preset-unrestricted、liangshen 等手机端没有）
-- 10~12 条 `miss`（0.2.2 改了写法）
-
-关键几条：
+82 条按层分布：提示词 25 / 代码 46 / 工具 8 / 兼容 3。最要紧的几条：
 
 | id | 名字 | 改什么 |
 |---|---|---|
@@ -122,7 +134,7 @@ A: `node patches/purge-patch.mjs restore --backup <备份目录>`，或者在手
 |---|---|---|
 | `patches/patches.json`（82 条补丁定义） | **dsh-purge 作者**（社区版 `mikamikasuki/dsh-purge`；原 `YuJunZhiXue/dsh-purge` 已 404） | 补丁的查找串/替换串/标记串是原作者设计的，这里只是导出成 JSON |
 | `patches/purge-patch.mjs` | 本仓库 | 执行器：探测 / 应用 / 回滚 / 语法校验，为重写部分 |
-| `lib/index.js`（注入层插件） | 本仓库 | 参照 dsh-purge 的注入层重写，适配 dsh-go 的 Cordis 装配方式 |
+| `lib/index.js`（注入层插件） | 本仓库 | 注入层思路来自 [LanJinGod/dsh-purge-go](https://github.com/LanJinGod/dsh-purge-go)（AGPL-3.0），这里是精简移植 + dsh-go 的 Cordis 装配适配 |
 | `README.md`、打包、dsh-go 包名映射 | 本仓库 | 适配层 |
 
 仓库挂在 `NANA7MI0` 名下只代表**谁维护这份适配**，不代表补丁设计归他。上游如果要求下架或改署名，改 README 和 LICENSE 即可，代码本身不绑定。
