@@ -1,5 +1,5 @@
-# dsh-purge-mini bundle patch
+# dsh-purge-mini：把插件插进宿主 profile 的插件列表。
+# id 与 name 都写包名，宿主按 name 去 profile 的 node_modules / 安装目录里解析。
 - insert:
     - id: dsh-purge-mini
       name: dsh-purge-mini
-      inject: [systemPrompt]
