@@ -350,7 +350,7 @@ dsh plugin --profile web add /root/tools/dsh-purge-go
   ```
 
 **不用手动准备注入正文**——插件首次加载时会自动把包内默认正文（25 KB）落盘到
-`$DSH_HOME/prompt-inject.md`，并默认开启。想换成自己写的，装好之后用 `purge_prompt` 的 `set`
+`~/.dsh/prompt-inject.md`，并默认开启。想换成自己写的，装好之后用 `purge_prompt` 的 `set`
 或直接编辑那个文件都行。
 
 装完**重启引擎**。补丁层不用安装，但要 **`cd` 进仓库目录再跑**——执行器用的是相对路径，
@@ -399,7 +399,7 @@ if (cfg.seedPrompt !== false) seedInject(home)                      // 落盘默
 if (!isFile(statePath(home))) writeState(home, { enabled: cfg.enabled !== false })  // 状态默认开启
 ```
 
-也就是：`$DSH_HOME/prompt-inject.md` 自动写好（默认正文 25 KB），
+也就是：`~/.dsh/prompt-inject.md` 自动写好（约 26 KB，包内那份 25240 B 会拼上题材分类扩展），
 状态文件里 `enabled: true`，系统提示里立刻开始丢官方身份段。
 
 **装完重启引擎就完事了。** 下面这 5 个工具是「管理入口」，用来查状态、换正文、关掉再打开，
