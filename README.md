@@ -145,6 +145,27 @@ case "read-only":
 | Windows `schtasks` 逻辑 | ❌ 丢弃 | 无计划任务 |
 | PTC / `run_code` 沙箱改写 | ❌ 丢弃 | 那部分依赖桌面沙箱后端 |
 
+### 每个被砍的模块原本是干什么的
+
+先把它们各自的职责说清楚，再说在手机上为什么用不上：
+
+| 文件 | 大小 | 原本干什么 | 手机上为什么用不上 |
+|---|---|---|---|
+| `client.js` | 505 KB | Electron 渲染进程的界面。整个文件是一个 `window.__ModuleLoader__.load({...})` 工厂 | 手机 node 进程没有 `window`，第一句就 ReferenceError |
+| `desktop.js` | 77 KB | 桌面宿主适配：识别 Electron、判断路径是否落在 `app.asar` 内、定位 `resources` 目录、按可执行文件名区分官方 Harness 与第三方 DSH Desktop、清理旧版 restart 脚本 | Android 上没有 `app.asar`、没有 `Resources/`、可执行文件不是 `.exe` |
+| `extract-asar.js` | 15 KB | 解 Electron 的 `app.asar` 归档：改名挪走归档、探测 asar 路径映射、判断「这个路径会不会被 Electron 映射进归档」 | 手机端根本没有 asar 归档 |
+| `hide-console.js` | 12 KB | 隐藏 Windows 控制台黑框：劫持 `child_process` 的 `spawn`，给子进程加 `windowsHide`；还负责往 Electron 宿主源码里注入还原钩子 | Linux / Android 没有 Windows 控制台这回事 |
+| `host-clean.js` | 1 KB | 判定「宿主提示词已清洗」用的几个标记串，被 `desktop.js` 生成 WSH 脚本时复用 | 只服务桌面链路，没有独立用途 |
+| `hooks-deny.js` | 7.5 KB | hooks 的 deny / ask 旁路开关，以及把它反向写回官方形态、标注状态 | 依赖桌面版的 hooks 目录结构 |
+| `continue-retry.js` | 11 KB | 一轮结束后自动追一句「继续」，识别用户主动中断和异常结束，避免重复重试 | **功能本身有用**，但注入层自带的 `lib/recover.js`（拒答续跑）已覆盖同类需求 |
+| `anchor.js` | 6 KB | 尾部锚点：注入正文约 22k 字符落在 system prompt 最前面，后面还跟着工具描述，模型最后读到的不是我们；它在末尾补一小段把身份锁放回 recency 位 | **思路有用**，但注入层走 `system-prompt/assemble` waterfall 直接改整个装配结果，不需要补丁式补救 |
+
+**注意最后两行**：`continue-retry.js` 和 `anchor.js` 解决的问题是真问题，不是废代码。
+它们被砍掉是因为**注入层用另一种方式解决了同一件事**，不是因为它没用。
+
+其余五个是纯桌面宿主适配，跟「破甲」没有关系——它们解决的是「怎么把补丁打进 Electron 应用的
+`app.asar` 里」，而手机上根本不存在这个对象。
+
 ### 砍掉的部分是实测跑不起来的，不是"估计用不上"
 
 不是凭感觉删的，逐项在本机（Android 16 / proot / Node 24）试过：
