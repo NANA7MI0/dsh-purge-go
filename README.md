@@ -172,7 +172,7 @@ case "read-only":
 
 **① 原版 `core.js` 直接 import 就崩**
 
-````
+```
 $ node core.js
 Error [ERR_MODULE_NOT_FOUND]: Cannot find module
   '/root/tools/dsh-purge-go/hide-console.js' imported from
