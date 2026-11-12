@@ -33,6 +33,7 @@
     "url": "https://github.com/NANA7MI0/dsh-purge-go/issues"
   },
   "files": [
+    "install.sh",
     "lib",
     "assets",
     "patches",
