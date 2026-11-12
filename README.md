@@ -308,7 +308,7 @@ window.__ModuleLoader__.load({ id: "dsh-purge", factory: (require) => {
 
 0.4.0 起改为**配套安装**：本仓库照旧只管注入 + 补丁，
 红队作为独立 bundle 装进去，两者互不依赖。具体步骤见
-[20. 配套红队插件](#20-配套红队插件)。
+[19. 配套红队插件](#19-配套红队插件)。
 
 **④ 补丁表里 29 条 `no_pkg` 就是桌面专属**
 
@@ -326,7 +326,7 @@ window.__ModuleLoader__.load({ id: "dsh-purge", factory: (require) => {
 的写法，不是上游的设计。
 
 > 结论：**Android + proot 上红队跑得起来**，0.3.x 的删除是过度修正。
-> 0.4.0 起本仓库仍然只管注入 + 补丁，红队按 [20. 配套红队插件](#20-配套红队插件) 单独装。
+> 0.4.0 起本仓库仍然只管注入 + 补丁，红队按 [19. 配套红队插件](#19-配套红队插件) 单独装。
 
 **为什么这么砍**：手机上的 DSH 引擎只有 `systemPrompt` / `tools` / `commands` 这几个服务，
 桌面版一大半代码在这里没有落点。留着只会增加体积和出错面。
@@ -708,7 +708,7 @@ subagent-types           →  dsh-subagent
 | 技能目录扫不到 | 预设里用的是 `customSkillDirs` + 包内路径，**原生支持** |
 
 **所以 0.4.0 起**：本仓库照旧只做注入 + 补丁，**红队作为独立 bundle 单独安装**，
-两者不互相依赖。怎么装见 [20. 配套红队插件](#20-配套红队插件)。
+两者不互相依赖。怎么装见 [19. 配套红队插件](#19-配套红队插件)。
 
 跟着 0.3.x 一起删掉的 `lib/redteam.js`（同步逻辑）和 `lib/objective.js`（目标卡）
 都不会加回来——上游用的是预设声明行 + `redteamMode` 服务，不需要文件同步。
@@ -854,8 +854,8 @@ node patches/purge-patch.mjs apply --dry
 - [16. 升级引擎之后](#16-升级引擎之后)
 - [17. 目录](#17-目录)
 - [18. 来源与许可](#18-来源与许可)
-- [19. 更新日志](#19-更新日志)
-- [20. 配套红队插件](#20-配套红队插件)
+- [19. 配套红队插件](#19-配套红队插件)
+- [20. 更新日志](#20-更新日志)
 
 ---
 
@@ -895,7 +895,93 @@ README.md         本文
 
 ---
 
-## 19. 更新日志
+## 19. 配套红队插件
+
+红队不是本仓库的功能，是**独立的 bundle**。想用就单独装，不想用完全可以不装。
+
+### 19.1 它是什么
+
+上游 [`Jueze-2019/dsh-redteam-mode`](https://github.com/Jueze-2019/dsh-redteam-mode)（MIT，157 star），
+包名 `dsh-redteam-mode`，约 1.8 MB。装进去以后：
+
+| 组成 | 内容 |
+|---|---|
+| **预设** | 1 个主预设「红队模式」+ 6 个执行角色（`recon` / `assess` / `vuln-scan` / `exploit` / `internal-recon` / `internal`） |
+| **工具** | 63 个 `redteam_*`：资产库、漏洞库、POC、凭据、WebShell、隧道、攻击链、评分、报告 |
+| **技能** | 41 篇方法论（侦察 / 内网 / 验证 / 隧道 / 规划 / 收口） |
+| **资产库** | `~/.dsh/redteam/` 下的 SQLite（`node:sqlite`，无原生模块） |
+
+### 19.2 装法
+
+**前置**：profile 目录可写，引擎版本 ≥ 0.1.0-rc.6（本机 0.2.2-rc.1 满足）。
+
+```sh
+# 1. 取包（上游 monorepo 的 packages/redteam-bundle）
+git clone --depth 1 https://github.com/Jueze-2019/dsh-redteam-mode /tmp/rt
+cp -r /tmp/rt/packages/redteam-bundle ~/.dsh/profiles/web/node_modules/dsh-redteam-mode
+
+# 2. 注册到 profile
+node -e "const f=process.env.HOME+'/.dsh/profiles/web/package.json',p=require(f);
+p.dsh.profile.bundles.includes('dsh-redteam-mode')||p.dsh.profile.bundles.push('dsh-redteam-mode');
+(p.dependencies=p.dependencies||{})['dsh-redteam-mode']='link:'+process.env.HOME+'/.dsh/profiles/web/node_modules/dsh-redteam-mode';
+require('fs').writeFileSync(f,JSON.stringify(p,null,2))"
+
+# 3. 重启引擎，新开对话时在「这次对话的预设」里选「红队模式」
+```
+
+**注意**：必须把包放进 `node_modules` 实体目录，**不能只建符号链接**。
+ESM 按真实路径解析，链接到 `~/tools/` 之类的位置后 `import '@deepseek-ai/dsh-tools'` 会失败。
+
+### 19.3 装完怎么验
+
+在红队会话里让它跑自检：
+
+```
+调 redteam_preflight，报 all_checked.total / available / broken / unknown 四个数
+```
+
+正常结果：`total: 46`（41 红队 + 5 dsh-go 常规），`unknown: 0`。
+
+**如果 `total: 0` 或全是 `unknown`**，是上游两个调用漏传 `scope`（见 20.5）。
+
+### 19.4 手机上有什么限制
+
+| 项 | 状态 |
+|---|---|
+| 预设 / 工具 / 技能 / 资产库 / 靶标绑定 / 并发闸门 | ✅ 全部可用 |
+| **右侧 Web 控制台** | ❌ Flutter 不渲染 Web slot，看不到那 10 个页签 |
+| **外部扫描器** | ❌ nmap / nuclei / fscan / ffuf 等要自己装，预检只报缺什么 |
+| **FOFA_KEY / VPS** | ❌ 要自己配，缺了不影响记录层，但打不了 |
+
+**红队是「作战指挥台」，不是「武器库」**：它管记录、算分、出报告、指挥子智能体，
+真正发包的是它调用的那些二进制。没有工具，它能规划、能落库、能出报告，但扫不了东西。
+
+### 19.5 已知的两个上游 bug（本仓库的装法里已修）
+
+`lib/tools.js` 里两处调用没传 `scope`，导致引擎的 `collect(options)` 只扫 global 层、
+收集不到注册在预设 fiber 层的技能 provider：
+
+```js
+// 原样（total 恒为 0）
+summaries = await skills.list()
+def = await skills.get(summary.name)
+
+// 修好（照抄引擎自带的 dsh-tool-skill）
+const skillLookup = {
+  signal: exec?.signal,
+  scope: exec?.agent,
+  cwd: await ctx.get('workingDirectory')?.ensure?.(exec.agent, exec.signal),
+}
+summaries = await skills.list(skillLookup)
+def = await skills.get(summary.name, skillLookup)
+```
+
+症状对照：修复前 `total: 0`；只修 `list` 后 `total: 46` 但 46 条全是 `unknown`；
+两处都修才变成 `available: 30 / broken: 16 / unknown: 0`。
+
+---
+
+## 20. 更新日志
 
 ### 0.4.0
 
@@ -989,87 +1075,3 @@ README.md         本文
 初始版本。
 
 ---
-
-## 20. 配套红队插件
-
-红队不是本仓库的功能，是**独立的 bundle**。想用就单独装，不想用完全可以不装。
-
-### 20.1 它是什么
-
-上游 [`Jueze-2019/dsh-redteam-mode`](https://github.com/Jueze-2019/dsh-redteam-mode)（MIT，157 star），
-包名 `dsh-redteam-mode`，约 1.8 MB。装进去以后：
-
-| 组成 | 内容 |
-|---|---|
-| **预设** | 1 个主预设「红队模式」+ 6 个执行角色（`recon` / `assess` / `vuln-scan` / `exploit` / `internal-recon` / `internal`） |
-| **工具** | 63 个 `redteam_*`：资产库、漏洞库、POC、凭据、WebShell、隧道、攻击链、评分、报告 |
-| **技能** | 41 篇方法论（侦察 / 内网 / 验证 / 隧道 / 规划 / 收口） |
-| **资产库** | `~/.dsh/redteam/` 下的 SQLite（`node:sqlite`，无原生模块） |
-
-### 20.2 装法
-
-**前置**：profile 目录可写，引擎版本 ≥ 0.1.0-rc.6（本机 0.2.2-rc.1 满足）。
-
-```sh
-# 1. 取包（上游 monorepo 的 packages/redteam-bundle）
-git clone --depth 1 https://github.com/Jueze-2019/dsh-redteam-mode /tmp/rt
-cp -r /tmp/rt/packages/redteam-bundle ~/.dsh/profiles/web/node_modules/dsh-redteam-mode
-
-# 2. 注册到 profile
-node -e "const f=process.env.HOME+'/.dsh/profiles/web/package.json',p=require(f);
-p.dsh.profile.bundles.includes('dsh-redteam-mode')||p.dsh.profile.bundles.push('dsh-redteam-mode');
-(p.dependencies=p.dependencies||{})['dsh-redteam-mode']='link:'+process.env.HOME+'/.dsh/profiles/web/node_modules/dsh-redteam-mode';
-require('fs').writeFileSync(f,JSON.stringify(p,null,2))"
-
-# 3. 重启引擎，新开对话时在「这次对话的预设」里选「红队模式」
-```
-
-**注意**：必须把包放进 `node_modules` 实体目录，**不能只建符号链接**。
-ESM 按真实路径解析，链接到 `~/tools/` 之类的位置后 `import '@deepseek-ai/dsh-tools'` 会失败。
-
-### 20.3 装完怎么验
-
-在红队会话里让它跑自检：
-
-```
-调 redteam_preflight，报 all_checked.total / available / broken / unknown 四个数
-```
-
-正常结果：`total: 46`（41 红队 + 5 dsh-go 常规），`unknown: 0`。
-
-**如果 `total: 0` 或全是 `unknown`**，是上游两个调用漏传 `scope`（见 20.5）。
-
-### 20.4 手机上有什么限制
-
-| 项 | 状态 |
-|---|---|
-| 预设 / 工具 / 技能 / 资产库 / 靶标绑定 / 并发闸门 | ✅ 全部可用 |
-| **右侧 Web 控制台** | ❌ Flutter 不渲染 Web slot，看不到那 10 个页签 |
-| **外部扫描器** | ❌ nmap / nuclei / fscan / ffuf 等要自己装，预检只报缺什么 |
-| **FOFA_KEY / VPS** | ❌ 要自己配，缺了不影响记录层，但打不了 |
-
-**红队是「作战指挥台」，不是「武器库」**：它管记录、算分、出报告、指挥子智能体，
-真正发包的是它调用的那些二进制。没有工具，它能规划、能落库、能出报告，但扫不了东西。
-
-### 20.5 已知的两个上游 bug（本仓库的装法里已修）
-
-`lib/tools.js` 里两处调用没传 `scope`，导致引擎的 `collect(options)` 只扫 global 层、
-收集不到注册在预设 fiber 层的技能 provider：
-
-```js
-// 原样（total 恒为 0）
-summaries = await skills.list()
-def = await skills.get(summary.name)
-
-// 修好（照抄引擎自带的 dsh-tool-skill）
-const skillLookup = {
-  signal: exec?.signal,
-  scope: exec?.agent,
-  cwd: await ctx.get('workingDirectory')?.ensure?.(exec.agent, exec.signal),
-}
-summaries = await skills.list(skillLookup)
-def = await skills.get(summary.name, skillLookup)
-```
-
-症状对照：修复前 `total: 0`；只修 `list` 后 `total: 46` 但 46 条全是 `unknown`；
-两处都修才变成 `available: 30 / broken: 16 / unknown: 0`。
