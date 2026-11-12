@@ -239,7 +239,7 @@ case "read-only":
 | 提示词注入内核 | ✅ 保留 | 换成了 LanJinGod 的插件实现 |
 | 引擎源码补丁 | ✅ 保留 | 重写成 `patches.json` + 执行器 |
 | `client.js`（662 KB 桌面客户端） | ❌ 丢弃 | 靠 `window.__ModuleLoader__` 挂载，引擎 node 进程里没有 `window`（详见 3.2 ②；Web UI 里能跑，但那是浏览器） |
-| `packages/purge-panel/`（独立面板包 `dsh-purge-panel` v1.1.2） | ❌ 丢弃 | 试过移植，**UI 在 Web UI 上能挂上**，但 9 个后端端点全缺、要自己重写，放弃——详见 [12.1](#121-不做-web-控制面板试过放弃了) |
+| `packages/purge-panel/`（独立面板包 `dsh-purge-panel` v1.1.2） | ❌ 丢弃 | 试过移植，**UI 在 Web UI 上能挂上**，但 9 个后端端点全缺、要自己重写，放弃——详见 [12.1](#121-不做-web-控制面板) |
 | `desktop.js`（83 KB 桌面宿主） | ❌ 丢弃 | Android 无此形态 |
 | `extract-asar.js`（15 KB） | ❌ 丢弃 | 解包 Electron 应用，手机用不上 |
 | `hide-console.js`（12 KB） | ❌ 丢弃 | 隐藏 Windows 控制台窗口 |
@@ -254,7 +254,7 @@ case "read-only":
 | 文件 | 大小 | 原本干什么 | 手机上为什么用不上 |
 |---|---|---|---|
 | `client.js` | 662 KB | Electron 渲染进程的界面。整个文件是一个 `window.__ModuleLoader__.load({...})` 工厂 | **在引擎 node 进程里**没有 `window`，第一句就 ReferenceError（在浏览器里能跑，但 dsh-go 不加载它——见 3.2 ② 的三环境对照） |
-| `packages/purge-panel/` | 56 个文件 / 661 KB 的 client.js | 独立 npm 包 `dsh-purge-panel` v1.1.2：Purge 的 Web 界面，声明 `platform: "web"`，靠注入 `@deepseek-ai/dsh-client-connection` / `dsh-client-runtime` / `dsh-client-locale` / `dsh-client-ui-slots` 挂到宿主 | **试过，最后放弃**。UI 能挂上（把 `inject` 换成 `ui-renderer` 后重新构建，产物字节数和原版一致），但 9 个后端端点全缺、要自己在 `webServer` 上重写，中间还踩了把 `GET /` 吞掉导致 App 连不上的坑。完整经过见 [12.1](#121-不做-web-控制面板试过放弃了) |
+| `packages/purge-panel/` | 56 个文件 / 661 KB 的 client.js | 独立 npm 包 `dsh-purge-panel` v1.1.2：Purge 的 Web 界面，声明 `platform: "web"`，靠注入 `@deepseek-ai/dsh-client-connection` / `dsh-client-runtime` / `dsh-client-locale` / `dsh-client-ui-slots` 挂到宿主 | **试过，最后放弃**。UI 能挂上（把 `inject` 换成 `ui-renderer` 后重新构建，产物字节数和原版一致），但 9 个后端端点全缺、要自己在 `webServer` 上重写，中间还踩了把 `GET /` 吞掉导致 App 连不上的坑。完整经过见 [12.1](#121-不做-web-控制面板) |
 | `desktop.js` | 83 KB | 桌面宿主适配：识别 Electron、判断路径是否落在 `app.asar` 内、定位 `resources` 目录、按可执行文件名区分官方 Harness 与第三方 DSH Desktop、清理旧版 restart 脚本 | Android 上没有 `app.asar`、没有 `Resources/`、可执行文件不是 `.exe` |
 | `extract-asar.js` | 15 KB | 解 Electron 的 `app.asar` 归档：改名挪走归档、探测 asar 路径映射、判断「这个路径会不会被 Electron 映射进归档」 | 手机端根本没有 asar 归档 |
 | `hide-console.js` | 12 KB | 隐藏 Windows 控制台黑框：劫持 `child_process` 的 `spawn`，给子进程加 `windowsHide`；还负责往 Electron 宿主源码里注入还原钩子 | Linux / Android 没有 Windows 控制台这回事 |
@@ -305,12 +305,12 @@ window.__ModuleLoader__.load({ id: "dsh-purge", factory: (require) => {
 | 环境 | 有 `window` 吗 | 会加载 `client.js` 吗 | 结论 |
 |---|---|---|---|
 | **引擎 node 进程** | ❌ | ❌ | 加载即崩，本节说的就是这个 |
-| **Web UI**（浏览器打开 `127.0.0.1:3080`） | ✅ | ✅ | **能挂上**——[12.1](#121-不做-web-控制面板试过放弃了) 里「右侧栏出现入口、标签页正常渲染」就是这里 |
-| **dsh-go App**（Flutter 原生界面） | — | ❌ | **看不到**——不加载 Web client 模块，见 [12.1](#121-不做-web-控制面板试过放弃了) |
+| **Web UI**（浏览器打开 `127.0.0.1:3080`） | ✅ | ✅ | **能挂上**——但 [12.1](#121-不做-web-控制面板) 说明了为什么最终不做 |
+| **dsh-go App**（Flutter 原生界面） | — | ❌ | **看不到**——不加载 Web client 模块，见 [12.1](#121-不做-web-控制面板) |
 
 所以 12.1 的「能挂上」和本节不冲突：**12.1 说的是浏览器，本节说的是引擎进程**，
 而 dsh-go 的 Flutter 界面两边都不沾——它不加载 Web client。三件事，三个环境，
-[12.1 末尾](#真正的判据dsh-go-上看不到)有完整对照。
+[12.1](#121-不做-web-控制面板)有完整说明。
 
 12.1 最后放弃的原因也不是「挂不上」，而是**挂上了但后端 9 个端点全缺**，要自己重写。
 
@@ -631,92 +631,28 @@ subagent-types           →  dsh-subagent
 
 不是漏了，是权衡之后决定不做。
 
-### 12.1 不做 Web 控制面板（试过，放弃了）
+### 12.1 不做 Web 控制面板
 
-原版带一个独立面板包 `packages/purge-panel`（`dsh-purge-panel` v1.1.2，56 个文件，
-661 KB 的打包产物），是个 React 写的 Web 界面，能看补丁状态、点按钮应用/回滚。
+原版带一个独立的 React 面板包（`dsh-purge-panel`，56 个文件、661 KB），能看补丁状态、点按钮应用/回滚。
 
-**试过移植，技术上能挂上，但代价太大，最后放弃。** 下面是完整经过，省得后来人再走一遍。
+**不做，原因只有一条：dsh-go 的界面显示不了面板。**
 
-> **先说清一个容易混的点**：下面说的「挂上」全部指 **Web UI**（浏览器打开 `127.0.0.1:3080`）。
-> 那不是 dsh-go 的界面——dsh-go 是 Flutter 原生，不加载 Web client 模块，
-> dsh-go 是 Flutter 原生界面，不加载 Web client 模块，面板在它上面看不到——这是本节结论的**根本原因**，详见本节末尾「为什么最终还是不做」。
-> 所以「面板能挂」和「dsh-go 看不到面板」两句话同时成立，不矛盾。
+面板走的是 DSH **Web UI 的 slot 机制**（`window.__ModuleLoader__` + `ctx.slots`），只在浏览器打开
+`127.0.0.1:3080` 时才加载。dsh-go 是 Flutter 原生界面，不加载 Web client 模块，面板在上面**根本不会出现**。
+而用 dsh-go 的人基本都在 App 的原生界面里，不会为了看个面板专门开浏览器——**做了没人看**。
 
-**能成的部分**
-
-- 它依赖的 6 个 `@deepseek-ai/dsh-client-*` 包里 4 个存在，缺的 2 个（`dsh-client-runtime`、
-  `dsh-client-ui-slots`）只要把 `package.json` 的 `dsh.client.inject` 换成
-  `dsh-client-ui-renderer` 就能过——**改完重新构建，产物字节数和原版一模一样（661562）**。
-- UI 确实挂上了，右侧栏出现 Purge 入口，标签页正常渲染。
-
-**卡住的部分**
-
-1. **后端接口完全没有**。面板要 `/dsh-purge/status`、`/apply`、`/revert` 等 9 个端点，
-   这些由桌面版的 `core.js` 提供。dsh-go 里没有任何东西接这一层，页面一进就是
-   「状态读取失败 404」。
-
-2. **要自己在 `webServer` 上注册路由**。查到了 `dsh-host-webserver` 的
-   `register({ kind, path, handler })`，也写出了 `/dsh-purge/status`，
-   `curl` 能拿到 87 条补丁的真实数据。
-
-3. **还有个 dsh-go 特有的鉴权闸**。`dsh-host-webserver` 里有：
-
-   ```js
-   static dshGoOpenRoutes = new Set(["exact /connect", "exact /oauth/callback"]);
-   ```
-
-   所有命名路由默认要过 `Connection` 鉴权（Host/Origin 围栏 + 浏览器 cookie）。
-   把 `prefixes /dsh-purge` 加进这个白名单才能通。
-
-4. **最后一步踩了雷**：面板的 `apiUrl()` 会以模块所在目录为基准拼路径，实际请求变成了
-   `/plugins/dsh-purge/status`，不是 `/dsh-purge/status`。为了兜住，我注册了一个
-   **`prefixes "/"` 的兜底路由**——结果它把 `GET /`（App 首页）也吞了，
-   引擎在跑、端口在听，但 **App 打不开首页，显示「连接失败」**。
-
-   这个错误影响到了正常使用，只能回滚：卸掉面板插件、删掉 `lib/api.js`、
-   把插件配置改成 `panelApi: false`。
-
-**结论**
-
-| 项 | 状态 |
-|---|---|
-| 面板 UI 能不能挂上 | 能 |
-| 面板后端要不要重写 | **要**（9 个端点 + 鉴权白名单） |
-| 会不会危及主流程 | **会**（路由前缀写错就把首页吞了） |
-| 投入产出 | 不划算 |
-
-**所以这个仓库不带面板，只有命令行。** 想用面板请去桌面版，那边 `core.js` 是完整的。
-
-如果你自己要做，记住三件事：**别注册 `prefixes "/"`**、`dshGoOpenRoutes` 要加白名单、
-面板的真实请求前缀是 `/plugins/<包名>/...` 而不是根路径。
-
-#### 真正的判据：dsh-go 上看不到
-
-上面那堆是「在 Web UI 里能不能跑」的结论。**但真正的判据不在这里**——
-**用 dsh-go 的人基本都在 App 的原生界面里，Web UI 只是偶尔打开看一眼的调试窗口。**
-面板只能在浏览器里显示，等于做了个没人看的东西。
-
-**实测**：红队插件（`dsh-redteam-mode`）自带一个 343 KB 的右侧常驻控制台，10 个页签：
-资产测绘 / 环境适配 / 智能体 / 会话隧道 / 漏洞战果 / 攻击链 / 得分目标 / 报告 / 知识库 / 技能库。
-装好之后在 dsh-go 里**看不到它**。
-
-三个执行环境要分清——这是全篇最容易混的地方：
-
-| 环境 | 有 `window` 吗 | 加载 `client.js` 吗 | 面板能看到吗 |
+| 环境 | 有 `window` 吗 | 加载 `client.js` 吗 | 能看到面板吗 |
 |---|---|---|---|
-| **引擎 node 进程** | ❌ | ❌ | — |
-| **Web UI**（浏览器打开 `127.0.0.1:3080`） | ✅ | ✅ | ✅ 能 |
-| **dsh-go App**（Flutter 原生界面） | — | ❌ | ❌ **看不到** |
+| 引擎 node 进程 | ❌ | ❌ | — |
+| Web UI（浏览器） | ✅ | ✅ | ✅ |
+| dsh-go App（Flutter） | — | ❌ | ❌ |
 
-红队那边还多一个它自己的坑：`dsh.client.inject` 是**空数组**，而 `client.js` 头部写着
-「只用平台 seed 里的 react 与 `ctx.slots`」——**没声明依赖 `dsh-client-ui-slots`**，
-所以它连 Web UI 上都挂不上，得先补 `inject`（跟本项目当初把 `inject` 换成
-`dsh-client-ui-renderer` 才挂上，是同一件事）。**但这跟 dsh-go 无关——dsh-go 压根不跑这段代码。**
+**影响：只少一个可视化界面，数据层完全不受影响。** 面板每个页签背后都只是调工具读 SQLite；
+没有面板，直接在对话里让 AI 调，拿到的数据一样，只是要花 token。
 
-**面板缺席的影响：只少一个可视化界面，数据层完全不受影响。**
-面板的每个页签背后都只是调 `redteam_*` 工具读 SQLite。没有面板，
-直接在对话里让 AI 调工具，拿到的是同样的数据——只是要花 token，不能点一下就刷新。
+> 红队插件（`dsh-redteam-mode`）自带的右侧控制台是同样情况：装好之后在 dsh-go 里看不到。
+> 它的 10 个页签（资产测绘 / 环境适配 / 智能体 / 会话隧道 / 漏洞战果 / 攻击链 / 得分目标 / 报告 / 知识库 / 技能库）
+> 同样只是 `redteam_*` 工具的可视化封装——没有面板，那些数据照样能查。
 
 ### 12.2 不补 `rewind` 增强模块
 
