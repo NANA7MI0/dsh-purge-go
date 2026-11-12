@@ -59,7 +59,7 @@
           "icon": "document",
           "effect": {
             "type": "insert",
-            "text": "把当前注入正文完整发给我看（调 purge_prompt）"
+            "text": "把当前注入的破甲提示词正文完整发给我看（调 purge_prompt）"
           }
         }
       ],
