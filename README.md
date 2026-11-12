@@ -152,7 +152,7 @@ dsh-purge 的选择是把 fail-closed 改成 fail-open——审批环节整个�
 - **注入层**（`lib/`）直接引用 [LanJinGod/dsh-purge-go](https://github.com/LanJinGod/dsh-purge-go)，本仓库只做 dsh-go 侧的路径适配
 - **补丁层**（`patches/`）的 87 条数据导出自社区维护版 [kingcharleslzy-ai/dsh-purge](https://github.com/kingcharleslzy-ai/dsh-purge)（MIT），执行器和包名映射由本仓库实现
 
-### 沙箱：手机上和桌面上不是一回事
+### 2.1 沙箱：手机上和桌面上不是一回事
 
 这里必须分清两个层面，否则会高估手机上的风险。
 
@@ -189,7 +189,7 @@ case "read-only":
 **在手机上，真正危险的不是沙箱补丁，是审批补丁**——因为审批是唯一一道还在工作的闸，
 而它被关掉了。
 
-### 关掉审批会不会让注入失效
+### 2.2 关掉审批会不会让注入失效
 
 不会。这两件事在不同的层，互不干扰：
 
@@ -208,7 +208,7 @@ case "read-only":
 **有个容易误判的地方**：审批开着时，被拒绝的结果会写进对话历史，模型看到 `rejected` 会改口说
 「我没有权限做这个」。看起来像「注入失效了」，其实提示词层毫发无损，只是工具用不了。
 
-### 你得自己判断
+### 2.3 你得自己判断
 
 这是**用安全换可用**的取舍，原版作者已经替你选好了 fail-open。几个中间地带：
 
@@ -244,7 +244,7 @@ case "read-only":
 | Windows `schtasks` 逻辑 | ❌ 丢弃 | 无计划任务 |
 | PTC / `run_code` 沙箱改写 | ❌ 丢弃 | 那部分依赖桌面沙箱后端 |
 
-### 每个被砍的模块原本是干什么的
+### 3.1 每个被砍的模块原本是干什么的
 
 先把它们各自的职责说清楚，再说在手机上为什么用不上：
 
@@ -267,7 +267,7 @@ case "read-only":
 `host-clean.js`、`hooks-deny.js`）是纯桌面宿主适配，跟「破甲」没有关系——它们解决的是
 「怎么把补丁打进 Electron 应用的 `app.asar` 里」，而手机上根本不存在这个对象。
 
-### 砍掉的部分是实测跑不起来的，不是"估计用不上"
+### 3.2 砍掉的部分是实测跑不起来的，不是"估计用不上"
 
 不是凭感觉删的，逐项在本机（Android 16 / proot / Node 24）试过：
 
@@ -397,7 +397,7 @@ dsh plugin --profile web add ~/dsh-purge-go
 装完**重启引擎**。补丁层不用安装，但要 **`cd` 进仓库目录再跑**——执行器用的是相对路径，
 在别处跑会报 `Cannot find module`。
 
-### 装完怎么确认生效
+### 5.1 装完怎么确认生效
 
 重启后开一个新会话（旧会话的 system 已写进历史，顶不动），任选一种确认：
 
@@ -418,7 +418,7 @@ cat ~/.dsh/dsh-purge/state.json            # 应该有 "enabled": true
 # 在对话里说「跑 purge_status 看看状态」，它会调工具并把结果读给你
 ```
 
-### 怎么重启引擎
+### 5.2 怎么重启引擎
 
 Android 上没有服务管理，直接杀掉 App 进程再打开就行：
 
@@ -484,7 +484,7 @@ node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
 
 `--root` 或环境变量 `DSH_AI_ROOT` 可指定引擎包目录，默认自动探测。
 
-### 0.2.2-rc.1 上的实测分布
+### 8.1 0.2.2-rc.1 上的实测分布
 
 | 状态 | 条数 | 意味着 |
 |---|---|---|
@@ -563,7 +563,7 @@ node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
 
 不是漏了，是权衡之后决定不做。
 
-### 不做 Web 控制面板（试过，放弃了）
+### 12.1 不做 Web 控制面板（试过，放弃了）
 
 原版带一个独立面板包 `packages/purge-panel`（`dsh-purge-panel` v1.1.2，56 个文件，
 661 KB 的打包产物），是个 React 写的 Web 界面，能看补丁状态、点按钮应用/回滚。
@@ -618,7 +618,7 @@ node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
 如果你自己要做，记住三件事：**别注册 `prefixes "/"`**、`dshGoOpenRoutes` 要加白名单、
 面板的真实请求前缀是 `/plugins/<包名>/...` 而不是根路径。
 
-### 不补 `rewind` 增强模块
+### 12.2 不补 `rewind` 增强模块
 
 原版有个 `lib/rewind.js`（20 KB），在引擎自带的回退之上做增强——「撤一步 / 撤一整轮」两种粒度、
 回退后恢复你的草稿、清掉待发消息、处理子智能体、避免接着上一轮的 request header。
@@ -634,11 +634,11 @@ node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
 
 结论：**自带够用，就不要动它。**
 
-### 不移植桌面工具链
+### 12.3 不移植桌面工具链
 
 见上面「每个被砍的模块原本是干什么的」——Electron、asar、Windows 控制台那套在 Android 上没有落点。
 
-### 不移植红队执行框架
+### 12.4 不移植红队执行框架
 
 原版的 `lib/redteam/` 约 1.1 MB（资产库、攻击链、评分、会话管理），依赖 SQLite 和桌面 UI。
 执行框架要的 16 个 `redteam_*` 工具由 `dsh-redteam-store` / `dsh-redteam-ui` 提供，
