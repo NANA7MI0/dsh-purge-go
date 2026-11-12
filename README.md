@@ -388,7 +388,7 @@ dsh: nothing was installed.
 
 ```sh
 git clone https://github.com/NANA7MI0/dsh-purge-go ~/dsh-purge-go
-cd ~/dsh-purge-go && ./install.sh
+cd ~/dsh-purge-go && sh install.sh
 ```
 
 `install.sh` 会连做两件事：**装插件**（注入层）+ **打补丁**（补丁层），做完提示你重启。
@@ -398,17 +398,24 @@ cd ~/dsh-purge-go && ./install.sh
 ```sh
 curl -L https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main | tar xz
 mv dsh-purge-go-main ~/dsh-purge-go
-cd ~/dsh-purge-go && ./install.sh
+cd ~/dsh-purge-go && sh install.sh
 ```
 
 ### 5.1 install.sh 的参数
 
+> **为什么写成 `sh install.sh` 而不是 `./install.sh`**
+>
+> 家目录（f2fs）上 `chmod +x` 有效，`./install.sh` 能跑；但**把仓库放 `/sdcard` 就不行**——
+> 那是 FAT32，没有执行位，直接跑会报 `Permission denied`。
+> 用 `sh install.sh` 不需要执行权限，两种情况都能跑，所以文档统一用这个写法。
+
+
 | 参数 | 作用 |
 |---|---|
 | 不带参数 | 装插件 + 打补丁（**推荐**） |
-| `--plugin-only` | 只装插件，不打补丁。注入层生效，引擎的审批和沙箱限制仍在 |
-| `--dry` | 只扫描 + 预演补丁会改哪些文件，**不装插件、不改任何文件** |
-| `--profile web` | 指定 profile，默认 `web` |
+| `sh install.sh --plugin-only` | 只装插件，不打补丁。注入层生效，引擎的审批和沙箱限制仍在 |
+| `sh install.sh --dry` | 只扫描 + 预演补丁会改哪些文件，**不装插件、不改任何文件** |
+| `sh install.sh --profile web` | 指定 profile，默认 `web` |
 
 装到哪个目录都行，用 `~`（也就是 `$HOME`）而不是写死 `/root`——因为**不同环境家目录不一样**：
 
