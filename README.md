@@ -2,8 +2,17 @@
 
 把 **dsh-purge** 移植适配到 **dsh-go**（Android + proot 里的 DSH 引擎）。
 
-两层：**注入层**直接引用 [LanJinGod/dsh-purge-go](https://github.com/LanJinGod/dsh-purge-go)；
-**补丁层**的 87 条数据导出自社区维护版（MIT），执行器和包名映射由本仓库实现。
+> ### 免责声明
+>
+> 本项目与 DeepSeek 官方无关，是第三方适配，不是官方发布的东西。
+>
+> 它会**主动移除引擎的审批和沙箱限制**——这不是副作用，是它要达到目的的手段。
+> 装与不装、装完怎么用、用在什么地方，**后果由你自己承担**。
+>
+> 请只在自己拥有或明确获授权的设备上使用。因使用本仓库造成的任何损失——
+> 包括但不限于数据丢失、设备异常、账号风险、服务条款纠纷——**作者不承担责任**。
+>
+> 代码按现状提供，不保证适用于你的环境，也不保证没有缺陷。自行判断，谨慎使用。
 
 > ### ⚠️ 装之前先看清楚
 >
@@ -128,6 +137,11 @@ dsh-purge 的选择是把 fail-closed 改成 fail-open——审批环节整个�
 想验证这个判断，可以**只装插件、不跑补丁层的 `purge-patch.mjs apply`**，
 对比一下「能聊」和「能干」的差别。（注意：插件本身的「装好即生效」指的是注入层，
 和这里说的补丁层 `apply` 是两件事。）
+
+**这两层各自的来源**：
+
+- **注入层**（`lib/`）直接引用 [LanJinGod/dsh-purge-go](https://github.com/LanJinGod/dsh-purge-go)，本仓库只做 dsh-go 侧的路径适配
+- **补丁层**（`patches/`）的 87 条数据导出自社区维护版 [kingcharleslzy-ai/dsh-purge](https://github.com/kingcharleslzy-ai/dsh-purge)（MIT），执行器和包名映射由本仓库实现
 
 ### 沙箱：手机上和桌面上不是一回事
 
