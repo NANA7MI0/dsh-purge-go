@@ -384,60 +384,48 @@ dsh: nothing was installed.
 
 > 这里只装**破甲**。红队是独立的包、独立的装法，见 [18. 配套红队插件](#18-配套红队插件)。
 
-**方法 A：git clone**（网络通的话最省事）
+**一条命令装两层**（推荐）：
 
 ```sh
 git clone https://github.com/NANA7MI0/dsh-purge-go ~/dsh-purge-go
-dsh plugin --profile web add ~/dsh-purge-go
+cd ~/dsh-purge-go && ./install.sh
 ```
 
-**方法 B：tar 包**（A 报 `could not read Username` 时用这个，本机实测 A 会失败）
+`install.sh` 会连做两件事：**装插件**（注入层）+ **打补丁**（补丁层），做完提示你重启。
+
+**git 拉不下来时**改用 tar 包（本机实测 `git clone` 会报 `could not read Username`）：
 
 ```sh
 curl -L https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main | tar xz
 mv dsh-purge-go-main ~/dsh-purge-go
-dsh plugin --profile web add ~/dsh-purge-go
+cd ~/dsh-purge-go && ./install.sh
 ```
 
-装到哪都行，两条命令的路径保持一致即可。用 `~`（也就是 `$HOME`）而不是写死 `/root`，是因为**不同环境家目录不一样**：
+### 5.1 install.sh 的参数
 
-- dsh-go 跑在 proot 里，`$HOME` 是 `/root`——但这个 root 是 proot 映射出来的**假身份**，真实进程属于 App 的 uid，**不需要任何 root 权限**
+| 参数 | 作用 |
+|---|---|
+| 不带参数 | 装插件 + 打补丁（**推荐**） |
+| `--plugin-only` | 只装插件，不打补丁。注入层生效，引擎的审批和沙箱限制仍在 |
+| `--dry` | 只扫描 + 预演补丁会改哪些文件，**不装插件、不改任何文件** |
+| `--profile web` | 指定 profile，默认 `web` |
+
+装到哪个目录都行，用 `~`（也就是 `$HOME`）而不是写死 `/root`——因为**不同环境家目录不一样**：
+
+- dsh-go 跑在 proot 里，`$HOME` 是 `/root`，但这个 root 是 proot 映射出来的**假身份**，真实进程属于 App 的 uid，**不需要任何 root 权限**
 - 在普通 Linux / PC 上装，`$HOME` 是 `/home/你的用户名`，写死 `/root` 反而会失败
 
-所以跟着 `~` 走最省事。
-
-**常见失败**：
-
-- `destination path already exists` —— `~/dsh-purge-go` 已经被占了（可能放了别的东西）。
-  换个名字：`git clone ... ~/dsh-purge-go2`，后面路径跟着改。
-- `could not read Username for 'https://github.com'` —— **方法 A 在这台机器上实测就会报这个**
-  （不一定是限流，也可能是 git 凭据没配）。直接用方法 B。
-
-**不用手动准备注入正文**——插件首次加载时会自动把包内默认正文（约 26 KB，会拼上题材分类扩展）落盘到
-`~/.dsh/prompt-inject.md`，并默认开启。想换成自己写的，装好之后用 `purge_prompt` 的 `set`
-或直接编辑那个文件都行。
-
-装完**重启引擎**，插件才会加载。
-
-**但这只是第一步。** 补丁层还要单独跑一次，执行器用的是相对路径，**必须 `cd` 进仓库目录**，在别处跑会报 `Cannot find module`。见下面 5.2。
-
-### 5.1 怎么重启引擎
-
-Android 上没有服务管理，直接杀掉 App 进程再打开就行：
+### 5.2 不想用脚本：手动两步
 
 ```sh
-am force-stop io.github.ccch1mneyyy.dsh_app
+# 第一步：装插件（注入层）
+dsh plugin --profile web add ~/dsh-purge-go
+
+# 第二步：打补丁（补丁层）—— 不做这步，破甲只生效一半
+cd ~/dsh-purge-go
+node patches/purge-patch.mjs probe   # 先看哪些能打
+node patches/purge-patch.mjs apply   # 真打
 ```
-
-或者手动：最近任务里把 App 划掉，再点图标打开。**光退出界面不算重启**，
-引擎进程还在内存里跑着，插件不会重新加载。
-
-**装完建议先看一眼 [14. 卸载插件](#14-卸载插件) 和 [15. 还原引擎](#15-还原引擎备份还在--备份没了)。**
-这两章在 README 里，README 在仓库目录里——删仓库就一起没了，提前知道比事后找强。
-
-### 5.2 装完还没结束：补丁层是第二步
-
-`dsh plugin --profile web add` 只是把**插件**装进来——给你 5 个工具和 1 个胶囊。
 
 **破甲靠两层，装完只有一层：**
 
@@ -450,20 +438,25 @@ am force-stop io.github.ccch1mneyyy.dsh_app
 
 补丁层会**改 32 个引擎包**、**必须重启引擎才生效**（重启会中断当前对话）。完整命令见 [8. 打补丁](#8-打补丁)。
 
-**一句话对照**：
+### 5.3 不用手动准备注入正文
+
+插件首次加载时会自动把包内默认正文（约 26 KB，会拼上题材分类扩展）落盘到
+`~/.dsh/prompt-inject.md`，并默认开启。想换成自己写的，装好之后用 `purge_prompt` 的 `set`
+或直接编辑那个文件都行。
+
+### 5.4 怎么重启引擎
+
+Android 上没有服务管理，直接杀掉 App 进程再打开就行：
 
 ```sh
-# 第一步（已做）：装插件
-dsh plugin --profile web add ~/dsh-purge-go
-
-# 第二步（还没做）：打补丁 —— 不做这一步，破甲只生效一半
-cd ~/dsh-purge-go
-node patches/purge-patch.mjs probe   # 先看哪些能打
-node patches/purge-patch.mjs apply   # 真打
-
-# 第三步：重启引擎让补丁生效
 am force-stop io.github.ccch1mneyyy.dsh_app
 ```
+
+或者手动：最近任务里把 App 划掉，再点图标打开。**光退出界面不算重启**，
+引擎进程还在内存里跑着，插件不会重新加载。
+
+**装完建议先看一眼 [14. 卸载插件](#14-卸载插件) 和 [15. 还原引擎](#15-还原引擎备份还在--备份没了)。**
+这两章在 README 里，README 在仓库目录里——删仓库就一起没了，提前知道比事后找强。
 
 ---
 
