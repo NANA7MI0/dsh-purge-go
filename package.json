@@ -49,20 +49,6 @@
     },
     "icon": "wrench",
     "contributes": {
-      "composer.tools": [
-        {
-          "id": "body",
-          "label": {
-            "zh": "查看破甲",
-            "en": "Purge"
-          },
-          "icon": "document",
-          "effect": {
-            "type": "insert",
-            "text": "把当前注入的破甲提示词正文完整发给我看（调 purge_prompt）"
-          }
-        }
-      ],
       "composer.actions": [
         {
           "id": "purge-status",
@@ -73,7 +59,7 @@
           "icon": "wrench",
           "effect": {
             "type": "insert",
-            "text": "把破甲状态报给我（调 purge_status）"
+            "text": "把破甲两层状态报给我：注入层（开关/正文体积/变体）+ 补丁层（87 条的生效数与分布）（调 purge_status）"
           }
         }
       ]
