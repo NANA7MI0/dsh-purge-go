@@ -417,8 +417,9 @@ dsh plugin --profile web add ~/dsh-purge-go
 `~/.dsh/prompt-inject.md`，并默认开启。想换成自己写的，装好之后用 `purge_prompt` 的 `set`
 或直接编辑那个文件都行。
 
-装完**重启引擎**。补丁层不用安装，但要 **`cd` 进仓库目录再跑**——执行器用的是相对路径，
-在别处跑会报 `Cannot find module`。
+装完**重启引擎**，插件才会加载。
+
+**但这只是第一步。** 补丁层还要单独跑一次，执行器用的是相对路径，**必须 `cd` 进仓库目录**，在别处跑会报 `Cannot find module`。见下面 5.2。
 
 ### 5.1 怎么重启引擎
 
@@ -433,6 +434,36 @@ am force-stop io.github.ccch1mneyyy.dsh_app
 
 **装完建议先看一眼 [14. 卸载插件](#14-卸载插件) 和 [15. 还原引擎](#15-还原引擎备份还在--备份没了)。**
 这两章在 README 里，README 在仓库目录里——删仓库就一起没了，提前知道比事后找强。
+
+### 5.2 装完还没结束：补丁层是第二步
+
+`dsh plugin --profile web add` 只是把**插件**装进来——给你 5 个工具和 1 个胶囊。
+
+**破甲靠两层，装完只有一层：**
+
+| 层 | 装完就有吗 | 怎么弄 |
+|---|---|---|
+| **注入层** | ✅ 有 | 插件首次加载时自动把正文落盘到 `~/.dsh/prompt-inject.md`，并默认开启 |
+| **补丁层** | ❌ **没有** | **手动跑** `node patches/purge-patch.mjs apply` |
+
+**只装插件不打补丁 = 只有一半。** 注入层能把官方身份段压掉，但引擎的审批和沙箱限制原样还在。
+
+补丁层会**改 32 个引擎包**、**必须重启引擎才生效**（重启会中断当前对话）。完整命令见 [8. 打补丁](#8-打补丁)。
+
+**一句话对照**：
+
+```sh
+# 第一步（已做）：装插件
+dsh plugin --profile web add ~/dsh-purge-go
+
+# 第二步（还没做）：打补丁 —— 不做这一步，破甲只生效一半
+cd ~/dsh-purge-go
+node patches/purge-patch.mjs probe   # 先看哪些能打
+node patches/purge-patch.mjs apply   # 真打
+
+# 第三步：重启引擎让补丁生效
+am force-stop io.github.ccch1mneyyy.dsh_app
+```
 
 ---
 
@@ -499,6 +530,11 @@ cat ~/.dsh/dsh-purge/state.json            # 应该有 "enabled": true
 ---
 
 ## 8. 打补丁
+
+> **这是安装的第二步。** [第 5 章](#5-安装)只装了插件（注入层），补丁层要单独跑这一步才算完整破甲。
+> 不打补丁的话，注入层照样生效，但引擎的审批和沙箱限制原样还在。
+>
+> 补丁会改 32 个引擎包、**必须重启引擎才生效**。
 
 ```sh
 node patches/purge-patch.mjs probe            # 扫描：哪些能打、哪些版本不匹配（会在当前目录写 patch-probe.json）
