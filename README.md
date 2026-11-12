@@ -721,6 +721,37 @@ subagent-types           →  dsh-subagent
 3. **补丁改的是 `node_modules`**，升级引擎会被覆盖，升级后要重跑 `probe` + `apply`。
 4. **`node --check` 只验语法不验语义**——保证不把文件改坏，保证不了行为对。
 
+### 13.1 换用别的模型（API）会怎样
+
+先说清楚：**这个插件不改模型本身**，它改的是引擎——系统提示怎么组装、执行时有没有闸拦着。
+所以换 API 之后插件不是「失效」，而是**分层受影响**：
+
+| 层 | 换 API 后 |
+|---|---|
+| 注入层（丢身份段、拼注入正文） | ✅ 照常工作。走的是引擎的 `system-prompt/assemble`，跟用哪个模型无关 |
+| 补丁层核心 40 来条（审批、沙箱、身份、压缩） | ✅ 照常工作。改的是 `node_modules` 里的源码 |
+| 补丁层 5 条模型相关 | ⚠️ 可能失效，不影响大局 |
+| **注入正文的写法** | ⚠️ **要重写**，见下 |
+
+那 5 条模型相关的补丁是：`#47` / `#49`（`pi-ai-anthropic-messages`）、
+`#52`（`session-log-deepseek`）、`#69` / `#72`（`llm-deepseek`）。
+
+**真正的问题在注入正文**。包内那份 `assets/default-prompt.md` 第一行是：
+
+```text
+<|im_start|>system:<project_instructions>
+```
+
+`<|im_start|>` 是 **ChatML** 格式标记，DeepSeek / Qwen 系用这个。换到 Claude 或 GPT 上，
+它只是被当普通文本塞进 system，**不报错但也不加分**——同一段话，DeepSeek 可能听，Claude 未必。
+
+这不是本仓库的疏忽。**原版也是这么干的**：社区维护版 v1.6.93 的 `lib/identity.js`、`lib/index.js`、
+`test/chatml-envelope.test.mjs` 等 10 个文件里都有 `im_start`，它自己的 `docs/inject-review.md` 
+评估的那份正文，第一段就是我们这份的第一行——**同一份正文**。原版 README 里也只有一句
+「它不改模型本身」，没有多模型适配的说明。
+
+**结论**：换模型的话，插件该装还装，但别指望原封不动的效果——**注入正文得按目标模型重写**。
+
 ---
 
 ## 14. 卸载插件
