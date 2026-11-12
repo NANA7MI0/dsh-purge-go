@@ -25,7 +25,7 @@
 >    "auto-granted"，`policy` 默认值从 `ask` 改成 `never`。
 > 2. **沙箱写权限放开**。`dsh-sandbox-local` 的 `deny file-write*` 变成 `allow`。
 >    （Android 上底层确实没拦——那套规则是 macOS 语法，手机没有执行后端。
->    但这句话是**给模型看的**，不改它会以为自己不能写。详见下面「沙箱」一节。）
+>    但这句话是**给模型看的**，不改它会以为自己不能写。详见 [2.1 沙箱](#21-沙箱手机上和桌面上不是一回事)。）
 >
 > **为什么没得选**：这两条补丁不是「顺手加的危险项」，是这套东西能不能用的前提。
 >
@@ -36,10 +36,10 @@
 >   于是不敢动手。
 >
 > 换句话说：**这两条不打开，这套东西就是个只会聊天的空壳。**
-> 完整论证见下一节。
+> 完整论证见 [第 1 节](#1-为什么必须去掉审批和沙箱)。
 >
 > **代价也很具体**：以后工具返回的网页、文档、日志里如果夹带指令，**没有第二道拦截**。
-> 想只留一半，见「你得自己判断」里的中间选项。
+> 想只留一半，见 [2.3 你得自己判断](#23-你得自己判断) 里的中间选项。
 
 ## 1. 为什么必须去掉审批和沙箱
 
@@ -110,7 +110,7 @@ dsh-purge 的选择是把 fail-closed 改成 fail-open——审批环节整个�
 这样命令能跑通，代价是**真的危险的操作也一样不问**。
 
 **所以取舍是**：要「接近原版的破甲」，就必须接受「没有第二道拦截」。两者是同一件事的两面，
-拆不开。想只留一半，见下面「你得自己判断」里的中间选项。
+拆不开。想只留一半，见 [2.3 你得自己判断](#23-你得自己判断) 里的中间选项。
 
 ---
 
@@ -144,7 +144,7 @@ dsh-purge 的选择是把 fail-closed 改成 fail-open——审批环节整个�
 | 压缩后的弱基线换成强基线 | 压缩一轮之后又变回官方口气 |
 
 > 最后一行是**手改**的，不在 `patches.json` 里——新机器跑 `apply` 得不到这一条，
-> 要自己动 `dsh-agent-instructions` 的常量。见「已知限制」。
+> 要自己动 `dsh-agent-instructions` 的常量。见 [13 已知限制](#13-已知限制)。
 
 想验证这个判断，可以**只装插件、不跑补丁层的 `purge-patch.mjs apply`**，
 对比一下「能聊」和「能干」的差别。（注意：插件本身的「装好即生效」指的是注入层，
@@ -239,7 +239,7 @@ case "read-only":
 | 提示词注入内核 | ✅ 保留 | 换成了 LanJinGod 的插件实现 |
 | 引擎源码补丁 | ✅ 保留 | 重写成 `patches.json` + 执行器 |
 | `client.js`（662 KB 桌面客户端） | ❌ 丢弃 | 手机端没有对应界面 |
-| `packages/purge-panel/`（独立面板包 `dsh-purge-panel` v1.1.2） | ❌ 丢弃 | 试过移植，能挂上但后端要重写，放弃——详见「不做 Web 控制面板」 |
+| `packages/purge-panel/`（独立面板包 `dsh-purge-panel` v1.1.2） | ❌ 丢弃 | 试过移植，能挂上但后端要重写，放弃——详见 [12.1 不做 Web 控制面板](#121-不做-web-控制面板试过放弃了) |
 | `desktop.js`（83 KB 桌面宿主） | ❌ 丢弃 | Android 无此形态 |
 | `extract-asar.js`（15 KB） | ❌ 丢弃 | 解包 Electron 应用，手机用不上 |
 | `hide-console.js`（12 KB） | ❌ 丢弃 | 隐藏 Windows 控制台窗口 |
@@ -254,7 +254,7 @@ case "read-only":
 | 文件 | 大小 | 原本干什么 | 手机上为什么用不上 |
 |---|---|---|---|
 | `client.js` | 662 KB | Electron 渲染进程的界面。整个文件是一个 `window.__ModuleLoader__.load({...})` 工厂 | 手机 node 进程没有 `window`，第一句就 ReferenceError |
-| `packages/purge-panel/` | 56 个文件 / 661 KB 的 client.js | 独立 npm 包 `dsh-purge-panel` v1.1.2：Purge 的 Web 界面，声明 `platform: "web"`，靠注入 `@deepseek-ai/dsh-client-connection` / `dsh-client-runtime` / `dsh-client-locale` / `dsh-client-ui-slots` 挂到宿主 | **试过，最后放弃**。UI 能挂上（把 `inject` 换成 `ui-renderer` 后重新构建，产物字节数和原版一致），但 9 个后端端点全缺、要自己在 `webServer` 上重写，中间还踩了把 `GET /` 吞掉导致 App 连不上的坑。完整经过见「不做 Web 控制面板」一节 |
+| `packages/purge-panel/` | 56 个文件 / 661 KB 的 client.js | 独立 npm 包 `dsh-purge-panel` v1.1.2：Purge 的 Web 界面，声明 `platform: "web"`，靠注入 `@deepseek-ai/dsh-client-connection` / `dsh-client-runtime` / `dsh-client-locale` / `dsh-client-ui-slots` 挂到宿主 | **试过，最后放弃**。UI 能挂上（把 `inject` 换成 `ui-renderer` 后重新构建，产物字节数和原版一致），但 9 个后端端点全缺、要自己在 `webServer` 上重写，中间还踩了把 `GET /` 吞掉导致 App 连不上的坑。完整经过见 [12.1](#121-不做-web-控制面板试过放弃了) |
 | `desktop.js` | 83 KB | 桌面宿主适配：识别 Electron、判断路径是否落在 `app.asar` 内、定位 `resources` 目录、按可执行文件名区分官方 Harness 与第三方 DSH Desktop、清理旧版 restart 脚本 | Android 上没有 `app.asar`、没有 `Resources/`、可执行文件不是 `.exe` |
 | `extract-asar.js` | 15 KB | 解 Electron 的 `app.asar` 归档：改名挪走归档、探测 asar 路径映射、判断「这个路径会不会被 Electron 映射进归档」 | 手机端根本没有 asar 归档 |
 | `hide-console.js` | 12 KB | 隐藏 Windows 控制台黑框：劫持 `child_process` 的 `spawn`，给子进程加 `windowsHide`；还负责往 Electron 宿主源码里注入还原钩子 | Linux / Android 没有 Windows 控制台这回事 |
@@ -466,7 +466,7 @@ cat ~/.dsh/dsh-purge/state.json            # 应该有 "enabled": true
 除了工具，还注册了一个斜杠命令 `/purge`，可以直接在输入框敲：
 `/purge prompt set /sdcard/x.md`（从文件读正文）、`/purge status` 等。
 
-**它们管的是注入层，不管补丁。** 补丁（`patches.json` 那 87 条）走另一条路，见下一节。
+**它们管的是注入层，不管补丁。** 补丁（`patches.json` 那 87 条）走另一条路，见 [第 8 节 打补丁](#8-打补丁)。
 
 所以如果你想「让 AI 帮我开破甲」——直接说就行，它会调 `purge_apply`；
 想「把注入正文换成我自己写的」——用 `purge_prompt` 的 `set`。
@@ -695,7 +695,7 @@ subagent-types           →  dsh-subagent
 
 ### 12.3 不移植桌面工具链
 
-见上面「每个被砍的模块原本是干什么的」——Electron、asar、Windows 控制台那套在 Android 上没有落点。
+见 [3.1 每个被砍的模块原本是干什么的](#31-每个被砍的模块原本是干什么的)——Electron、asar、Windows 控制台那套在 Android 上没有落点。
 
 ### 12.4 不移植红队执行框架
 
@@ -834,8 +834,34 @@ node patches/purge-patch.mjs apply --dry
 
 ## 17. 目录
 
+**章节**
+
+- [1. 为什么必须去掉审批和沙箱](#1-为什么必须去掉审批和沙箱)
+- [2. 破甲怎么实现的：注入层 + 补丁层](#2-破甲怎么实现的注入层-补丁层)
+- [3. 定位：只保留核心破甲，桌面版其余功能全部放弃](#3-定位只保留核心破甲桌面版其余功能全部放弃)
+- [4. 环境](#4-环境)
+- [5. 安装](#5-安装)
+- [6. 装好即生效，怎么确认](#6-装好即生效怎么确认)
+- [7. 5 个操作工具](#7-5-个操作工具)
+- [8. 打补丁](#8-打补丁)
+- [9. 状态含义](#9-状态含义)
+- [10. 关键补丁](#10-关键补丁)
+- [11. 和桌面版 dsh-purge 的差别](#11-和桌面版-dsh-purge-的差别)
+- [12. 刻意不做的几件事](#12-刻意不做的几件事)
+- [13. 已知限制](#13-已知限制)
+- [14. 卸载插件](#14-卸载插件)
+- [15. 回滚补丁](#15-回滚补丁)
+- [16. 升级引擎之后](#16-升级引擎之后)
+- [17. 目录](#17-目录)
+- [18. 来源与许可](#18-来源与许可)
+- [19. 更新日志](#19-更新日志)
+
+---
+
+**文件**
+
 ```
-lib/              注入层 18 个模块（来自 LanJinGod）
+lib/              注入层 16 个模块（来自 LanJinGod）
 assets/           categories.json / default-prompt.md / net-scope-ranges.json
 （skills/ 与 presets/ 已随红队子系统一起移除）
 patches/          patches.json（87 条）+ purge-patch.mjs（probe / apply / restore 执行器）
@@ -848,7 +874,7 @@ NOTICE            三部分来源与各自许可
 README.md         本文
 ```
 
-合计 64 个文件、0.84 MB。
+合计 35 个文件、0.87 MB。
 
 改 `lib/` 之后必须重启引擎；改 `package.json` 会被热读。
 
