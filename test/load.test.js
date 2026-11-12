@@ -71,9 +71,17 @@ test('apply：注册三个段、三个事件、四个工具、一条命令、原
   }
   assert.equal(record.commands[0].name, 'purge')
 
-  assert.deepEqual(record.strips.map((entry) => entry.id), ['state'])
-  assert.deepEqual(record.panels.map((entry) => entry.id).sort(), ['prompt', 'purge'])
-  assert.deepEqual(record.actions.map((entry) => entry.id).sort(), ['body', 'reload', 'toggle'])
+  // 面板与状态条都改用清单静态字段：bridge.panel() 和 bridge.strip() 在当前 App 版本
+  // 都是空实现——调用不报错，但 App 侧永远报「插件还没处理这一项」。
+  // 实验段会用 {view} 对象尝试注册一次 purge 面板（路径 D），所以这里允许出现一次。
+  assert.ok(record.panels.length <= 1, '实验最多注册一个面板')
+  // 注意：native.js 里有一段「桥接实验」，会分别用两条路径注册一次 state，
+  // 所以这里能看到 state。它只是实验，不影响清单里 composer.strip 用静态 text。
+  assert.ok(record.strips.length <= 2, '实验最多注册两个状态条（路径 A 与 C）')
+  // on() 只注册清单里声明过的 id：body。
+  // 状态条点击走不通——App 的 tappable 依赖 bridge.strip()，而那是空实现；
+  // 改用第二个加号工具「状态」（静态 effect: insert），和「正文」一样的机制。
+  assert.deepEqual(record.actions.map((entry) => entry.id).sort(), ['body'])
 
   // 地区门与拒答续跑都要真的挂上：pre-step 两个（mnemon 过滤 + 地区门），status 一个
   const preSteps = record.events.filter((entry) => entry.event === 'agent/pre-step')

@@ -301,36 +301,32 @@ window.__ModuleLoader__.load({ id: "dsh-purge", factory: (require) => {
 它依赖浏览器 / Electron 的 `window.__ModuleLoader__`。手机上的 node 进程**没有 `window`**，
 这行第一句就已经 `ReferenceError`。
 
-**③ 红队预设是空壳**
+**③ 红队子系统要单独装（0.4.0 已解决）**
 
-预设的 `agent.cordis.yml` 要求 AI 调用这 16 个工具：
+红队的工具、预设、技能全部由上游独立项目 `dsh-redteam-mode` 提供，
+**不在本仓库里**。0.3.x 之所以整个删掉，是因为当时误判成「dsh-go 跑不了」。
 
-```
-redteam_preflight       redteam_agent_slot      redteam_engagement_open
-redteam_sessions        redteam_session_bind    redteam_session_info
-redteam_asset_stats     redteam_attack_chain    redteam_credentials
-redteam_evidence_list   redteam_evidence_upgrade redteam_evidence_verify
-redteam_score_list      redteam_role_prompt     redteam_unverified_count
-redteam_vulns
-```
-
-这些工具由 `dsh-redteam-store` 和 `dsh-redteam-ui` 两个插件提供——**这两个包在本机都不存在**。
-切到 redteam 预设，AI 只会对着不存在的工具空转。
+0.4.0 起改为**配套安装**：本仓库照旧只管注入 + 补丁，
+红队作为独立 bundle 装进去，两者互不依赖。具体步骤见
+[20. 配套红队插件](#20-配套红队插件)。
 
 **④ 补丁表里 29 条 `no_pkg` 就是桌面专属**
 
 `probe` 的 `no_pkg` 分类（29 条）对应的都是桌面壳、OAuth 登录流程、Electron preset 这类东西，
 手机端没有这些包，补丁无从下手。
 
-**⑤ 23 条红队技能同步了但进不了技能目录**
+**⑤ 技能目录：原生支持，不用折腾（0.4.0 更正）**
 
-文件确实落到了 `~/.dsh/redteam/skills/`（23 个），但引擎的技能根目录是这几类——
-项目内 `.dsh/skills`、`.agents/skills`、自定义目录、`~/.dsh/skills`、`~/.agents/skills`、内置——
-**`~/.dsh/redteam/skills` 不在其中任何一个**，所以日常对话里看不到它们。既不占上下文，也调不出来，等于静态文档。
+上游 `dsh-redteam-mode` 的预设里，`skill-filesystem` 用的是
+`includeDefaultRoots: false` + `customSkillDirs`，两个根分别是 `$DSH_HOME/skills`
+和**包内自带的 `skills/`**（用 `createRequire` 解析，包搬到哪都对）。
 
-> 结论：这些能力在 Android + proot 这个形态下**没有可运行的落点**。
-> 保留它们只会让仓库看起来功能很多，实际一用就报错。
-> 所以砍到只剩注入 + 补丁。
+实测 46 个技能全部进了技能注册表，`skill` 工具能直接加载正文。
+早期版本把技能同步到 `~/.dsh/redteam/skills/` 才扫不到——那是 `LanJinGod/dsh-purge-go`
+的写法，不是上游的设计。
+
+> 结论：**Android + proot 上红队跑得起来**，0.3.x 的删除是过度修正。
+> 0.4.0 起本仓库仍然只管注入 + 补丁，红队按 [20. 配套红队插件](#20-配套红队插件) 单独装。
 
 **为什么这么砍**：手机上的 DSH 引擎只有 `systemPrompt` / `tools` / `commands` 这几个服务，
 桌面版一大半代码在这里没有落点。留着只会增加体积和出错面。
@@ -697,21 +693,25 @@ subagent-types           →  dsh-subagent
 
 见 [3.1 每个被砍的模块原本是干什么的](#31-每个被砍的模块原本是干什么的)——Electron、asar、Windows 控制台那套在 Android 上没有落点。
 
-### 12.4 不移植红队执行框架
+### 12.4 红队不放进本仓库，但也不再排除（0.4.0 更正）
 
-原版的 `lib/redteam/` 约 1.1 MB（资产库、攻击链、评分、会话管理），依赖 SQLite 和桌面 UI。
-执行框架要的 16 个 `redteam_*` 工具由 `dsh-redteam-store` / `dsh-redteam-ui` 提供，
-**这两个包在 dsh-go 里都不存在**，切到 redteam 预设 AI 只会对着空工具空转。
+红队的资产库、攻击链、评分、会话管理约 1.1 MB，上游是独立项目
+[`Jueze-2019/dsh-redteam-mode`](https://github.com/Jueze-2019/dsh-redteam-mode)（MIT）。
 
-**早期版本还留着 23 条技能文档和 3 个预设文件（238 KB），后来也删了**，原因是它们白占地方：
+**0.3.x 的判断是错的。** 当时以为它依赖的 SQLite 和桌面 UI 在 dsh-go 里没有落点，
+实际查下来：
 
-- 技能落在 `~/.dsh/redteam/skills/`，而引擎的技能根目录只有
-  `.dsh/skills`、`.agents/skills`、自定义目录、`~/.dsh/skills`、`~/.agents/skills`、内置——
-  **`redteam/skills` 不在其中**，扫不到，AI 根本看不见
-- 预设依赖上面那些不存在的工具
-- 跟着一起删的还有 `lib/redteam.js`（同步逻辑）、`lib/objective.js`（目标卡，读 `~/.dsh/redteam/current`）
+| 当时以为 | 实际 |
+|---|---|
+| 需要 `better-sqlite3` 这类原生模块 | 用的是 Node 内置 `node:sqlite`（`DatabaseSync`），**零外部依赖** |
+| 面板是 Web 的，手机上用不了 | 面板确实用不了，但**工具层和资产库完全不依赖面板** |
+| 技能目录扫不到 | 预设里用的是 `customSkillDirs` + 包内路径，**原生支持** |
 
-如果你手上有旧版本留下的 `~/.dsh/redteam/`，可以直接删掉，不影响任何功能。
+**所以 0.4.0 起**：本仓库照旧只做注入 + 补丁，**红队作为独立 bundle 单独安装**，
+两者不互相依赖。怎么装见 [20. 配套红队插件](#20-配套红队插件)。
+
+跟着 0.3.x 一起删掉的 `lib/redteam.js`（同步逻辑）和 `lib/objective.js`（目标卡）
+都不会加回来——上游用的是预设声明行 + `redteamMode` 服务，不需要文件同步。
 
 ---
 
@@ -837,7 +837,7 @@ node patches/purge-patch.mjs apply --dry
 **章节**
 
 - [1. 为什么必须去掉审批和沙箱](#1-为什么必须去掉审批和沙箱)
-- [2. 破甲怎么实现的：注入层 + 补丁层](#2-破甲怎么实现的注入层-补丁层)
+- [2. 破甲怎么实现的：注入层 + 补丁层](#2-破甲怎么实现的注入层--补丁层)
 - [3. 定位：只保留核心破甲，桌面版其余功能全部放弃](#3-定位只保留核心破甲桌面版其余功能全部放弃)
 - [4. 环境](#4-环境)
 - [5. 安装](#5-安装)
@@ -855,6 +855,7 @@ node patches/purge-patch.mjs apply --dry
 - [17. 目录](#17-目录)
 - [18. 来源与许可](#18-来源与许可)
 - [19. 更新日志](#19-更新日志)
+- [20. 配套红队插件](#20-配套红队插件)
 
 ---
 
@@ -895,6 +896,42 @@ README.md         本文
 ---
 
 ## 19. 更新日志
+
+### 0.4.0
+
+**红队：从「排除」改为「配套安装」。**
+
+0.3.x 把整套红队子系统删掉了，理由是「手机上跑不了」。**这个判断是错的**，0.4.0 更正：
+
+| 当时以为 | 实测 |
+|---|---|
+| 需要 `better-sqlite3` 原生模块 | 用 Node 内置 `node:sqlite`（`DatabaseSync`），零外部依赖 |
+| 预设依赖的工具不存在 | 上游 `dsh-redteam-mode` 自带 63 个 `redteam_*` 工具 |
+| 技能落在扫不到的目录 | 预设用 `customSkillDirs` + 包内路径，原生支持 |
+
+**本仓库仍然只管注入 + 补丁**，红队作为独立 bundle 装，两者不互相依赖。
+新增第 20 章写清装法、验证方法和手机上的限制。
+
+**补丁执行器两处修复**
+
+- **`apply` 因 marker 整片跳过**（真 bug）：`if (marked(p, text)) continue` 让「文件里已有任一 marker」就跳过整个文件，一条补丁有多处 pattern 时，后几处永远打不上。改为逐条判断——这个 pattern 还在就打。
+- **`probe` 判不出「追加型」和「幂等型」**（真 bug）：追加型补丁（`rep` 里含 `pat`）打完 pattern 仍在文件里，按命中数算永远算 `partial`，而且 `apply` 每次都会重复追加一遍；幂等型（`rep === pat`，全表 3 条）永远无法完成。新增 `isDone(e, text)` 统一判定，`probe` 用它算「还剩几处没打」，`apply` 用它排除已完成项。
+
+**结果**：`partial` 从 8 条清零，`applied` 从 43 涨到 **52/87**。
+
+**红队上游两个 bug（本仓库装法里已修）**
+
+- `skills.list()` 没传 `scope` → 只扫 global 层 → `total: 0`
+- `skills.get(name)` 同样没传 → 正文读不到 → 46 条全判 `unknown`
+
+修法照抄引擎自带的 `dsh-tool-skill`：`scope: exec.agent` + `cwd` 从 `workingDirectory.ensure` 取。
+修复后 `total: 46 / available: 30 / broken: 16 / unknown: 0`。详见 20.5。
+
+**新增测试**
+
+`test/core.test.js` 15 个（补丁引擎：sha256 校验、事务回滚、备份 manifest、`isDone` 三态判定），
+其中「文件里已有 marker 也要把剩余 pattern 补上」这条在旧逻辑下 FAIL、新逻辑下 PASS，确认不是假测试。
+测试总数 47 → **62**。
 
 ### 0.3.2
 
@@ -950,3 +987,89 @@ README.md         本文
 ### 0.1.0
 
 初始版本。
+
+---
+
+## 20. 配套红队插件
+
+红队不是本仓库的功能，是**独立的 bundle**。想用就单独装，不想用完全可以不装。
+
+### 20.1 它是什么
+
+上游 [`Jueze-2019/dsh-redteam-mode`](https://github.com/Jueze-2019/dsh-redteam-mode)（MIT，157 star），
+包名 `dsh-redteam-mode`，约 1.8 MB。装进去以后：
+
+| 组成 | 内容 |
+|---|---|
+| **预设** | 1 个主预设「红队模式」+ 6 个执行角色（`recon` / `assess` / `vuln-scan` / `exploit` / `internal-recon` / `internal`） |
+| **工具** | 63 个 `redteam_*`：资产库、漏洞库、POC、凭据、WebShell、隧道、攻击链、评分、报告 |
+| **技能** | 41 篇方法论（侦察 / 内网 / 验证 / 隧道 / 规划 / 收口） |
+| **资产库** | `~/.dsh/redteam/` 下的 SQLite（`node:sqlite`，无原生模块） |
+
+### 20.2 装法
+
+**前置**：profile 目录可写，引擎版本 ≥ 0.1.0-rc.6（本机 0.2.2-rc.1 满足）。
+
+```sh
+# 1. 取包（上游 monorepo 的 packages/redteam-bundle）
+git clone --depth 1 https://github.com/Jueze-2019/dsh-redteam-mode /tmp/rt
+cp -r /tmp/rt/packages/redteam-bundle ~/.dsh/profiles/web/node_modules/dsh-redteam-mode
+
+# 2. 注册到 profile
+node -e "const f=process.env.HOME+'/.dsh/profiles/web/package.json',p=require(f);
+p.dsh.profile.bundles.includes('dsh-redteam-mode')||p.dsh.profile.bundles.push('dsh-redteam-mode');
+(p.dependencies=p.dependencies||{})['dsh-redteam-mode']='link:'+process.env.HOME+'/.dsh/profiles/web/node_modules/dsh-redteam-mode';
+require('fs').writeFileSync(f,JSON.stringify(p,null,2))"
+
+# 3. 重启引擎，新开对话时在「这次对话的预设」里选「红队模式」
+```
+
+**注意**：必须把包放进 `node_modules` 实体目录，**不能只建符号链接**。
+ESM 按真实路径解析，链接到 `~/tools/` 之类的位置后 `import '@deepseek-ai/dsh-tools'` 会失败。
+
+### 20.3 装完怎么验
+
+在红队会话里让它跑自检：
+
+```
+调 redteam_preflight，报 all_checked.total / available / broken / unknown 四个数
+```
+
+正常结果：`total: 46`（41 红队 + 5 dsh-go 常规），`unknown: 0`。
+
+**如果 `total: 0` 或全是 `unknown`**，是上游两个调用漏传 `scope`（见 20.5）。
+
+### 20.4 手机上有什么限制
+
+| 项 | 状态 |
+|---|---|
+| 预设 / 工具 / 技能 / 资产库 / 靶标绑定 / 并发闸门 | ✅ 全部可用 |
+| **右侧 Web 控制台** | ❌ Flutter 不渲染 Web slot，看不到那 10 个页签 |
+| **外部扫描器** | ❌ nmap / nuclei / fscan / ffuf 等要自己装，预检只报缺什么 |
+| **FOFA_KEY / VPS** | ❌ 要自己配，缺了不影响记录层，但打不了 |
+
+**红队是「作战指挥台」，不是「武器库」**：它管记录、算分、出报告、指挥子智能体，
+真正发包的是它调用的那些二进制。没有工具，它能规划、能落库、能出报告，但扫不了东西。
+
+### 20.5 已知的两个上游 bug（本仓库的装法里已修）
+
+`lib/tools.js` 里两处调用没传 `scope`，导致引擎的 `collect(options)` 只扫 global 层、
+收集不到注册在预设 fiber 层的技能 provider：
+
+```js
+// 原样（total 恒为 0）
+summaries = await skills.list()
+def = await skills.get(summary.name)
+
+// 修好（照抄引擎自带的 dsh-tool-skill）
+const skillLookup = {
+  signal: exec?.signal,
+  scope: exec?.agent,
+  cwd: await ctx.get('workingDirectory')?.ensure?.(exec.agent, exec.signal),
+}
+summaries = await skills.list(skillLookup)
+def = await skills.get(summary.name, skillLookup)
+```
+
+症状对照：修复前 `total: 0`；只修 `list` 后 `total: 46` 但 46 条全是 `unknown`；
+两处都修才变成 `available: 30 / broken: 16 / unknown: 0`。

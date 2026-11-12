@@ -75,9 +75,25 @@ test('panelView：预算内、动作全部有 handler、根是 stack', () => {
   visitAll(view, (node) => {
     if (node.type === 'text') assert.ok(String(node.text).length <= 2000)
   })
-  const allowed = new Set(['toggle', 'reload', 'seed', 'revert', 'use', 'unmap'])
-  for (const action of actions) assert.ok(allowed.has(action), `未注册的动作 ${action}`)
-  assert.ok(actions.has('toggle'))
+  // 按**面板作用域**校验：每个面板的 actions 里出现的 id，必须在该面板自己的 handler 表里。
+  // 用全局白名单会让「seed 挪到正文面板但破甲面板还留着同名 handler」这种死代码照样全绿。
+  const PURGE_HANDLERS = new Set(['toggle', 'reload', 'patchApply', 'patchRevert', 'use', 'unmap', 'seed', 'revert'])
+  const PROMPT_HANDLERS = new Set(['copy', 'toggle', 'seed', 'revert'])
+  const purgeActions = actionsOf(view)
+  for (const action of purgeActions) {
+    assert.ok(PURGE_HANDLERS.has(action), `破甲面板用了未注册的动作 ${action}`)
+  }
+  assert.ok(purgeActions.has('toggle'))
+  assert.ok(purgeActions.has('patchApply'), '破甲面板必须有应用补丁入口')
+
+  // 正文面板独立校验
+  const pv = promptView(snapshot(home), { locale: 'zh' })
+  const promptActions = actionsOf(pv)
+  for (const action of promptActions) {
+    assert.ok(PROMPT_HANDLERS.has(action), `正文面板用了未注册的动作 ${action}`)
+  }
+  assert.ok(promptActions.has('seed'), '正文面板要有落盘默认入口')
+  assert.ok(promptActions.has('revert'), '正文面板要有关闭并备份入口')
 })
 
 test('promptView：正文预览被截断到 1800 字以内', () => {

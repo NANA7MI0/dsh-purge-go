@@ -1,6 +1,6 @@
 {
   "name": "dsh-purge-go",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "description": "把 dsh-purge 移植适配到 dsh-go：提示词注入层（LanJinGod 实现）+ 87 条引擎源码补丁，附 5 个操作工具",
   "type": "module",
   "main": "lib/index.js",
@@ -8,7 +8,8 @@
     ".": "./lib/index.js",
     "./view": "./lib/view.js",
     "./cordis.patch.yml": "./cordis.patch.yml",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./patches/core": "./patches/lib/core.mjs"
   },
   "dsh": {
     "bundle": {
@@ -39,5 +40,43 @@
     "LICENSE",
     "NOTICE",
     "README.md"
-  ]
+  ],
+  "dshGo": {
+    "v": 1,
+    "title": {
+      "zh": "破甲",
+      "en": "Purge"
+    },
+    "icon": "wrench",
+    "contributes": {
+      "composer.tools": [
+        {
+          "id": "body",
+          "label": {
+            "zh": "查看破甲",
+            "en": "Purge"
+          },
+          "icon": "document",
+          "effect": {
+            "type": "insert",
+            "text": "把当前注入正文完整发给我看（调 purge_prompt）"
+          }
+        }
+      ],
+      "composer.actions": [
+        {
+          "id": "purge-status",
+          "label": {
+            "zh": "破甲状态",
+            "en": "Status"
+          },
+          "icon": "wrench",
+          "effect": {
+            "type": "insert",
+            "text": "把破甲状态报给我（调 purge_status）"
+          }
+        }
+      ]
+    }
+  }
 }
