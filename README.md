@@ -525,6 +525,54 @@ node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
 
 ---
 
+### 8.2 为什么有 29 条打不上
+
+29 条 `no_pkg` 不是移植失败，是**它们要改的包手机上根本没有**。
+
+按目标包分类：
+
+| 类别 | 条数 | 是什么 | 为什么手机没有 |
+|---|---|---|---|
+| preset 预设包 | 8 | standard / ptc / cordis / minimal / liangshen | 桌面版靠「预设包」切换能力，手机只跑 `dsh-base` 一套配置 |
+| desktop-shell | 6 | 桌面主进程、更新、退出 | 手机没有 Electron 外壳 |
+| hooks 兼容层 | 4 | 让 Claude Code、Codex 把 DSH 当后端调 | 手机没有这些编辑器 |
+| escalation | 3 | 权限升级阶梯 | 桌面版把审批拆成独立模块，手机是单包 |
+| pi-ai | 2 | Anthropic 接口适配 | 手机只连 DeepSeek |
+| PTC / run_code | 2 | 桌面沙箱的代码执行器 | 手机跑 proot，没有那套沙箱 |
+| 其他 | 4 | 沙箱提示、DeepSeek role、liangshen | 同属桌面专属 |
+
+**换个说法**：dsh-go 不是桌面版裁出来的，是另一套运行形态——
+
+- 桌面版跑在 Electron 里，有 `app.asar`、有预设切换、有 Desktop Shell 管进程
+- 手机版跑在 proot 里，只有一个 node 进程，能力由 `dsh-base` 的配置决定
+
+所以这些补丁**没有目标是正常的**，不是「没打完」。
+
+### 8.3 「改名」的那批没丢
+
+有些包在桌面版和手机版叫法不同：
+
+```text
+user-approval-invariant  →  dsh-user-approval
+web-app-lib              →  dsh-web-app
+system-prompt-nested     →  dsh-system-prompt
+subagent-types           →  dsh-subagent
+```
+
+**这批没丢**——`patches.json` 里这些补丁的 `file` 字段本来就并列写了两种名字，
+执行器 `candidatesFor()` 会挨个试，找到存在的那个：
+
+```json
+#5   file: ["user-approval", "user-approval-invariant"]
+#40  file: ["system-prompt", "system-prompt-nested"]
+```
+
+所以 #5 这种现在显示的是 `applied`，不是 `no_pkg`。
+
+**一句话总结**：87 条里 45 条在手机上真能打，破甲靠的就是这批。
+
+---
+
 ## 9. 状态含义
 
 | 状态 | 含义 |
