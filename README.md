@@ -422,7 +422,31 @@ cd ~/dsh-purge-go && sh install.sh
 - dsh-go 跑在 proot 里，`$HOME` 是 `/root`，但这个 root 是 proot 映射出来的**假身份**，真实进程属于 App 的 uid，**不需要任何 root 权限**
 - 在普通 Linux / PC 上装，`$HOME` 是 `/home/你的用户名`，写死 `/root` 反而会失败
 
-### 5.2 不想用脚本：手动两步
+### 5.2 安装时可能看到 aborted，不用管
+
+**`sh install.sh` 跑到最后一步会「装插件」，这一步会让宿主热装配插件层**，
+正在执行的那条命令可能被宿主取消，输出里出现：
+
+```
+Error: tool call aborted
+```
+
+**这不是安装失败。** 脚本特意把顺序排成「先打补丁、后装插件」，就是为了让这件事无害：
+补丁在装配之前就已经落地了，装配打断的只是收尾那几行输出。
+
+**装完自己核对一下就行**：
+
+```sh
+# 1. 插件进去了吗（有输出就说明装上了）
+node -p 'require(process.env.HOME+"/.dsh/profiles/web/package.json").dependencies["dsh-purge-go"]'
+
+# 2. 补丁打上了吗（看 applied 那一项）
+cd ~/dsh-purge-go && node patches/purge-patch.mjs probe
+```
+
+两条都符合，直接重启引擎即可。
+
+### 5.3 不想用脚本：手动两步
 
 ```sh
 # 第一步：装插件（注入层）
@@ -445,13 +469,13 @@ node patches/purge-patch.mjs apply   # 真打
 
 补丁层会**改 32 个引擎包**、**必须重启引擎才生效**（重启会中断当前对话）。完整命令见 [8. 打补丁](#8-打补丁)。
 
-### 5.3 不用手动准备注入正文
+### 5.4 不用手动准备注入正文
 
 插件首次加载时会自动把包内默认正文（约 26 KB，会拼上题材分类扩展）落盘到
 `~/.dsh/prompt-inject.md`，并默认开启。想换成自己写的，装好之后用 `purge_prompt` 的 `set`
 或直接编辑那个文件都行。
 
-### 5.4 怎么重启引擎
+### 5.5 怎么重启引擎
 
 Android 上没有服务管理，直接杀掉 App 进程再打开就行：
 
