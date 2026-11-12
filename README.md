@@ -756,60 +756,155 @@ subagent-types           →  dsh-subagent
 
 ## 14. 卸载插件
 
-先关掉注入，再摘插件：
+**卸载有两层，漏掉补丁层等于没卸。** 很多人只做了第 ② 步就以为干净了，结果引擎源码里还留着 52 处改动。
+
+### 14.1 正确顺序
 
 ```sh
-# ① 关破甲（正文会备份到 ~/.dsh/dsh-purge/backups/）
-#    在对话里让 AI 跑 purge_revert，或者直接删 state.json 里的开关
+# ① 还原补丁层（最容易漏，也最重要）
+cd ~/dsh-purge-go
+node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
 
-# ② 从 profile 里摘掉
+# ② 从 profile 摘掉插件
 dsh plugin --profile web remove dsh-purge-go
-```
 
-**这条命令只摘注册，不删文件。** 实测残留：
-
-| 残留 | 在哪 | 要不要删 |
-|---|---|---|
-| `node_modules/dsh-purge-go` 软链 | `~/.dsh/profiles/web/` | 可以留着，无害 |
-| `prompt-inject.md` | `~/.dsh/` | **想彻底清就删**，留着也不会生效 |
-| `dsh-purge/`（state、备份） | `~/.dsh/` | 想重装恢复状态就留着 |
-
-要连文件一起清：
-
-```sh
+# ③ 删插件自己的文件
+rm -rf ~/dsh-purge-go
 rm -rf ~/.dsh/prompt-inject.md ~/.dsh/dsh-purge
 rm -rf ~/.dsh/profiles/web/node_modules/dsh-purge-go
+
+# ④ 重启引擎
+am force-stop io.github.ccch1mneyyy.dsh_app
 ```
 
-**卸完要重启引擎**，否则跑着的进程里插件还在。
+**为什么 ① 必须在 ② 之前**：`restore` 要用到仓库里的 `patches/`，删了仓库就没工具还原了。
+
+### 14.2 每一层各是什么
+
+| 层 | 在哪 | 卸掉的方法 | 漏了会怎样 |
+|---|---|---|---|
+| **补丁层** | `/opt/dsh/node_modules/@deepseek-ai/` 下 32 个包 | `purge-patch.mjs restore` | **引擎源码仍是破甲状态**，AI 一眼能看出被改过 |
+| **注入层** | `~/.dsh/prompt-inject.md` | 删文件 | 每次开对话都往系统提示里塞破甲正文 |
+| **插件注册** | `~/.dsh/profiles/web/package.json` | `dsh plugin remove` | 重启后插件又加载回来 |
+| **插件文件** | `~/dsh-purge-go`、`node_modules` 软链 | `rm -rf` | 占空间；重装时可能撞路径 |
+
+### 14.3 怎么确认真的卸干净
+
+```sh
+# 补丁层：应该没有任何输出
+grep -rl "dsh-purge" /opt/dsh/node_modules/@deepseek-ai/
+
+# 关键文案：应该看到 rejected automatically
+grep -o 'actions that require approval are rejected automatically' \
+  /opt/dsh/node_modules/@deepseek-ai/dsh-user-approval/lib/types/index.js
+
+# 注入层与配置
+ls ~/.dsh/ | grep -i 'purge\|prompt-inject'   # 应该为空
+
+# 插件注册（应该输出 undefined）
+node -p 'require(process.env.HOME+"/.dsh/profiles/web/package.json").dependencies["dsh-purge-go"]'
+```
+
+**别用 `probe` 的 `applied` / `partial` 数字判断是否卸干净。** 这两个状态在**原版系统上本来就会出现**——补丁表里很多 pattern 是不同版本的备选分支，原版只命中其中一部分。判断标准只有两条：**`grep` 搜不到 `dsh-purge`**，**关键文案是原版**。
 
 ---
 
-## 15. 回滚补丁
+## 15. 还原引擎（备份还在 / 备份没了）
 
-补丁**按批次逆序撤**才算干净（后打的先撤）：
+补丁打的是 `/opt/dsh/node_modules/@deepseek-ai/` 下的 32 个包。还原有两条路，取决于**你手上还有没有 apply 时生成的备份**。
 
-```sh
-node patches/purge-patch.mjs restore --backup ./backup-<后一次的时间戳>
-node patches/purge-patch.mjs restore --backup ./backup-<前一次的时间戳>
-```
+### 15.1 有备份：用 restore
 
-两批相加的文件数会比实际改动少——**有文件被两批都动过**，只跑一个会停在混合状态。
-
-`dsh-agent-instructions` 的提示词常量在补丁之外还被单独改过，普通 restore 不一定覆盖到。
-要彻底回官方：
+`apply` 每次都会在仓库目录下生成 `backup-<毫秒时间戳>/files/`，里面是**被这次补丁改过的文件的原始副本**。
 
 ```sh
-pnpm --dir /opt/dsh add @deepseek-ai/dsh-agent-instructions --force
+cd ~/dsh-purge-go
+ls -d backup-*            # 看有哪几批
+
+# 按时间倒序撤（后打的先撤）
+node patches/purge-patch.mjs restore --backup ./backup-<最后一批>
+node patches/purge-patch.mjs restore --backup ./backup-<更早一批>
 ```
 
-验证（应该没有输出）：
+**为什么要倒序**：同一文件可能被多批补丁动过，先撤早的会被后撤的覆盖，最后停在混合状态。
+
+**只跑一次 restore 不够**——`restore` 只还原「这一批备份里有的文件」，跨批次的混合改动要靠倒序全跑完。
+
+### 15.2 备份没了：从 npm 重装原版包
+
+**这是最常见的情况**——仓库删了、备份跟着没了，但引擎还是被改过的。
+
+思路很直接：**补丁改的是 npm 包的文件，那就把原版包重新装回来覆盖**。
+
+#### 方案 A：按引擎自己的 lock 文件重装（推荐）
+
+`/opt/dsh/package-lock.json` 记录了所有依赖的确切版本，直接按它重装：
 
 ```sh
-grep -rl "dsh-purge" /opt/dsh/node_modules/@deepseek-ai/
+cd /opt/dsh
+npm install --force
 ```
 
-**回滚后必须重启引擎**。
+这条命令会按 lock 文件把 `@deepseek-ai/*` 全部重装成原版。**不需要知道哪些包被改过**。
+
+#### 方案 B：只重装确定被改的包
+
+不想动整个 `node_modules` 的话，只覆盖被改的那 32 个：
+
+```sh
+# 先确认引擎版本（从任一包读）
+V=$(node -p "require('/opt/dsh/node_modules/@deepseek-ai/dsh-base/package.json').version")
+# 例如 0.2.2-rc.1
+
+for P in dsh-agent-loop dsh-user-approval dsh-system-prompt dsh-agent-instructions \
+         dsh-sandbox-local dsh-base dsh-tool-fs dsh-subagent dsh-tool-bash \
+         dsh-llm-deepseek dsh-sandbox-policy dsh-api-session-controller dsh-fs-sandbox \
+         dsh-fs-observation-policy dsh-repeat-tool-reminder \
+         dsh-compaction-tool-result-pruner dsh-web-app dsh-tool-web dsh-persona \
+         dsh-session-format-v0-to-v1 dsh-settings dsh-session-reference \
+         dsh-permission-presets dsh-session-log-deepseek dsh-harness-dev-context \
+         dsh-deliverable-file-references dsh-tool-todo dsh-session \
+         dsh-experimental-auto-review dsh-app-boot dsh-skill-badge dsh-client-connection; do
+  TARBALL="/tmp/$P.tgz"
+  curl -sL "https://registry.npmmirror.com/@deepseek-ai/$P/-/$P-$V.tgz" -o "$TARBALL"
+  rm -rf "/opt/dsh/node_modules/@deepseek-ai/$P"
+  rm -rf /tmp/px && mkdir -p /tmp/px
+  tar xzf "$TARBALL" -C /tmp/px
+  cp -a /tmp/px/package "/opt/dsh/node_modules/@deepseek-ai/$P"
+  echo "  $P $V"
+done
+rm -rf /tmp/px /tmp/*.tgz
+```
+
+**这 32 个包怎么来的**：跑 `probe`，取 `status === 'applied'` 的 `pkg` 字段去重。
+
+### 15.3 验证有没有还原干净
+
+**最硬的办法：逐个和原版 tarball 比字节**。
+
+```sh
+V=$(node -p "require('/opt/dsh/node_modules/@deepseek-ai/dsh-base/package.json').version")
+mkdir -p /tmp/vf && cd /tmp/vf
+
+for P in <上面那 32 个包>; do
+  curl -sL "https://registry.npmmirror.com/@deepseek-ai/$P/-/$P-$V.tgz" -o "$P.tgz"
+  mkdir -p "ex-$P" && tar xzf "$P.tgz" -C "ex-$P"
+  D=$(diff -r "ex-$P/package" "/opt/dsh/node_modules/@deepseek-ai/$P" \
+      | grep '^diff\|^Only in' | grep -v package.json | wc -l)
+  echo "$P  差异 $D 处"
+done
+# 全部 0 处即为完全还原
+```
+
+**为什么不能只看 `probe`**：`probe` 只判断「pattern 字符串在不在文件里」，分不清「这是原版」还是「补丁已经打过了」——原版状态下 `partial` 有 22 条、`applied` 有 1 条，看起来像没卸干净，其实是补丁表自己的备选分支设计。
+
+### 15.4 还原后必须重启
+
+```sh
+am force-stop io.github.ccch1mneyyy.dsh_app
+```
+
+**不重启的话，跑着的引擎进程里加载的还是旧代码**，文件改了也白改。
 
 ---
 
@@ -959,7 +1054,7 @@ def = await skills.get(summary.name, skillLookup)
 - [12. 刻意不做的几件事](#12-刻意不做的几件事)
 - [13. 已知限制](#13-已知限制)
 - [14. 卸载插件](#14-卸载插件)
-- [15. 回滚补丁](#15-回滚补丁)
+- [15. 还原引擎（备份还在 / 备份没了）](#15-还原引擎备份还在--备份没了)
 - [16. 升级引擎之后](#16-升级引擎之后)
 - [17. 来源与许可](#17-来源与许可)
 - [18. 配套红队插件](#18-配套红队插件)
