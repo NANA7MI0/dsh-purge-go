@@ -909,10 +909,11 @@ node patches/purge-patch.mjs apply --dry
 ```
 lib/              注入层 16 个模块（来自 LanJinGod）
 assets/           categories.json / default-prompt.md / net-scope-ranges.json
-（skills/ 与 presets/ 已随红队子系统一起移除）
-patches/          patches.json（87 条）+ purge-patch.mjs（probe / apply / restore 执行器）
+patches/          patches.json（87 条）
+  purge-patch.mjs   CLI 壳（66 行，只做参数解析与输出）
+  lib/core.mjs      纯函数库（528 行：probe / apply / restore / isDone / verifyFile）
 scripts/          engine-smoke.mjs（段注册与 assemble 重排验证）· kit-check.mjs（插件规范检查，需外部 plugin-kit）
-test/             7 组共 56 项测试
+test/             7 组共 62 项测试
 cordis.patch.yml  插件插入声明
 package.json      清单（name / version / engines.dsh / dsh.bundle.patch）
 LICENSE           AGPL-3.0 全文
@@ -920,7 +921,12 @@ NOTICE            三部分来源与各自许可
 README.md         本文
 ```
 
-合计 35 个文件、0.87 MB。
+合计 **37 个文件、1.0 MB**。
+
+> 红队的 `skills/` 和 `presets/` **不在本仓库**——那套是独立 bundle，见 [19. 配套红队插件](#19-配套红队插件)。
+> 早期版本带过 23 个技能和 3 个预设（238 KB）：0.3.2 删掉了，0.4.0 改成另外装，
+> 所以本仓库目录里不会再有它们。文件数与体积也跟着从 35 / 0.87 MB 变成 37 / 1.0 MB
+> （多了 `patches/lib/core.mjs` 和 `test/core.test.js`）。
 
 改 `lib/` 之后必须重启引擎；改 `package.json` 会被热读。
 
