@@ -397,7 +397,35 @@ dsh plugin --profile web add ~/dsh-purge-go
 装完**重启引擎**。补丁层不用安装，但要 **`cd` 进仓库目录再跑**——执行器用的是相对路径，
 在别处跑会报 `Cannot find module`。
 
-### 5.1 装完怎么确认生效
+### 5.1 怎么重启引擎
+
+Android 上没有服务管理，直接杀掉 App 进程再打开就行：
+
+```sh
+am force-stop io.github.ccch1mneyyy.dsh_app
+```
+
+或者手动：最近任务里把 App 划掉，再点图标打开。**光退出界面不算重启**，
+引擎进程还在内存里跑着，插件不会重新加载。
+
+---
+
+## 6. 装好即生效，怎么确认
+
+**插件加载时就会自动破甲**，不用先跑什么命令。启动时会做两件事：
+
+```js
+if (cfg.seedPrompt !== false) seedInject(home)                      // 落盘默认注入正文
+if (!isFile(statePath(home))) writeState(home, { enabled: cfg.enabled !== false })  // 状态默认开启
+```
+
+也就是：`~/.dsh/prompt-inject.md` 自动写好（约 26 KB，包内那份 25240 B 会拼上题材分类扩展），
+状态文件里 `enabled: true`，系统提示里立刻开始丢官方身份段。
+
+**装完重启引擎就完事了。** 下面这 5 个工具是「管理入口」，用来查状态、换正文、关掉再打开，
+不是「必须先跑一遍」的步骤。
+
+### 6.1 装完怎么确认
 
 重启后开一个新会话（旧会话的 system 已写进历史，顶不动），任选一种确认：
 
@@ -417,34 +445,6 @@ cat ~/.dsh/dsh-purge/state.json            # 应该有 "enabled": true
 # ③ 让 AI 自查（最稳的一条）
 # 在对话里说「跑 purge_status 看看状态」，它会调工具并把结果读给你
 ```
-
-### 5.2 怎么重启引擎
-
-Android 上没有服务管理，直接杀掉 App 进程再打开就行：
-
-```sh
-am force-stop io.github.ccch1mneyyy.dsh_app
-```
-
-或者手动：最近任务里把 App 划掉，再点图标打开。**光退出界面不算重启**，
-引擎进程还在内存里跑着，插件不会重新加载。
-
----
-
-## 6. 装好即生效，不需要手动开
-
-**插件加载时就会自动破甲**，不用先跑什么命令。启动时会做两件事：
-
-```js
-if (cfg.seedPrompt !== false) seedInject(home)                      // 落盘默认注入正文
-if (!isFile(statePath(home))) writeState(home, { enabled: cfg.enabled !== false })  // 状态默认开启
-```
-
-也就是：`~/.dsh/prompt-inject.md` 自动写好（约 26 KB，包内那份 25240 B 会拼上题材分类扩展），
-状态文件里 `enabled: true`，系统提示里立刻开始丢官方身份段。
-
-**装完重启引擎就完事了。** 下面这 5 个工具是「管理入口」，用来查状态、换正文、关掉再打开，
-不是「必须先跑一遍」的步骤。
 
 ---
 
@@ -498,11 +498,19 @@ node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
 
 合计 87。换引擎版本后分布会变，先跑 `probe` 再决定。
 
-> **有 4 条补丁数据残缺**（`patches.json` 里标了 `broken: true`）：**3 / 21 / 73 / 77**，
-> 它们的 `pattern` 是空对象，永远匹配不上。这是从社区版导数据时丢的字段，手工补不回来。
-> 不影响其余 83 条。
+> **有 4 条在你这种干净安装上本来就不会命中，不是坏了：**
 >
-> 另外 **32 / 40 / 53** 少了部分替换项，能打但不完整（会在 `probe` 里显示 `partial`）。
+> | id | 名字 | 为什么打不上 |
+> |---|---|---|
+> | 3 | `SCOPE_INTRO` | 旧版引擎会把作用域强句重复叠加，补丁负责收回去；0.2.2-rc.1 上没有这句（实测 grep 0 处） |
+> | 21 | `BASH_TIMEOUT_RESTORE` | **仅迁移用**——只把带 `[dsh-purge]` 标记的 `timeoutMs: 600000` 改回 60000，干净安装没有这个标记 |
+> | 73 | `PRESET_BASH_MIRROR_LINE` | 目标那行早被 #70 的整段重写吃掉了，社区版注释里写明「pattern 再也不会命中」 |
+> | 77 | `REWIND_DROP_SENT_ON_APPEND` | 作用在 `conversation-client` 包，手机上没这个包 |
+>
+> 这四条**都不影响破甲**——破甲靠的是注入层和审批/沙箱那批补丁，它们在正常工作的 45 条里。
+> `probe` 里看到它们只是「没有目标」，不是「数据坏了」。
+>
+> 另外 **32 / 40 / 53** 少了部分替换项，能打但不完整（`probe` 里显示 `partial`）。
 >
 > **关于两种数据格式**：`patches.json` 里有两种写法——
 > `replacements: [{pattern, replace}, ...]` 和旧式的 `patterns: [...] + replace: "..."`。
