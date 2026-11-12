@@ -2,6 +2,10 @@
 
 把 **dsh-purge** 移植适配到 **dsh-go**（Android + proot 里的 DSH 引擎）。
 
+**本仓库只做「破甲」这一件事**——提示词注入 + 引擎补丁，装完有 1 个胶囊和 1 个菜单项。
+**红队（靶标资产库 / 攻击链 / 63 个工具 / 41 篇技能）是另一个独立包**，不装也完全不影响破甲，
+想用的话见 [19. 配套红队插件](#19-配套红队插件)。
+
 > **只适配 DeepSeek。** 换别的模型不会报错，但破甲效果会打折扣——注入正文是按 DeepSeek 的格式写的。
 > 原版哪天支持了多模型，这里会跟着加。详见 [13.1](#131-换用别的模型api会怎样)。
 
@@ -378,8 +382,20 @@ dsh: nothing was installed.
 
 ## 5. 安装
 
+> 这里只装**破甲**。红队是独立的包、独立的装法，见 [19. 配套红队插件](#19-配套红队插件)。
+
+**方法 A：git clone**（网络通的话最省事）
+
 ```sh
 git clone https://github.com/NANA7MI0/dsh-purge-go ~/dsh-purge-go
+dsh plugin --profile web add ~/dsh-purge-go
+```
+
+**方法 B：tar 包**（A 报 `could not read Username` 时用这个，本机实测 A 会失败）
+
+```sh
+curl -L https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main | tar xz
+mv dsh-purge-go-main ~/dsh-purge-go
 dsh plugin --profile web add ~/dsh-purge-go
 ```
 
@@ -390,17 +406,12 @@ dsh plugin --profile web add ~/dsh-purge-go
 
 所以跟着 `~` 走最省事。
 
-**两个常见失败**：
+**常见失败**：
 
 - `destination path already exists` —— `~/dsh-purge-go` 已经被占了（可能放了别的东西）。
   换个名字：`git clone ... ~/dsh-purge-go2`，后面路径跟着改。
-- `could not read Username for 'https://github.com'` —— 大概率是 **GitHub 限流**（429），
-  不是仓库私有。换 tar 包：
-
-  ```sh
-  curl -L https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main | tar xz
-  mv dsh-purge-go-main ~/dsh-purge-go
-  ```
+- `could not read Username for 'https://github.com'` —— **方法 A 在这台机器上实测就会报这个**
+  （不一定是限流，也可能是 git 凭据没配）。直接用方法 B。
 
 **不用手动准备注入正文**——插件首次加载时会自动把包内默认正文（约 26 KB，会拼上题材分类扩展）落盘到
 `~/.dsh/prompt-inject.md`，并默认开启。想换成自己写的，装好之后用 `purge_prompt` 的 `set`
