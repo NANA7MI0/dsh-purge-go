@@ -238,8 +238,8 @@ case "read-only":
 |---|---|---|
 | 提示词注入内核 | ✅ 保留 | 换成了 LanJinGod 的插件实现 |
 | 引擎源码补丁 | ✅ 保留 | 重写成 `patches.json` + 执行器 |
-| `client.js`（662 KB 桌面客户端） | ❌ 丢弃 | 手机端没有对应界面 |
-| `packages/purge-panel/`（独立面板包 `dsh-purge-panel` v1.1.2） | ❌ 丢弃 | 试过移植，能挂上但后端要重写，放弃——详见 [12.1 不做 Web 控制面板](#121-不做-web-控制面板试过放弃了) |
+| `client.js`（662 KB 桌面客户端） | ❌ 丢弃 | 靠 `window.__ModuleLoader__` 挂载，引擎 node 进程里没有 `window`（详见 3.2 ②；Web UI 里能跑，但那是浏览器） |
+| `packages/purge-panel/`（独立面板包 `dsh-purge-panel` v1.1.2） | ❌ 丢弃 | 试过移植，**UI 在 Web UI 上能挂上**，但 9 个后端端点全缺、要自己重写，放弃——详见 [12.1](#121-不做-web-控制面板试过放弃了) |
 | `desktop.js`（83 KB 桌面宿主） | ❌ 丢弃 | Android 无此形态 |
 | `extract-asar.js`（15 KB） | ❌ 丢弃 | 解包 Electron 应用，手机用不上 |
 | `hide-console.js`（12 KB） | ❌ 丢弃 | 隐藏 Windows 控制台窗口 |
@@ -253,7 +253,7 @@ case "read-only":
 
 | 文件 | 大小 | 原本干什么 | 手机上为什么用不上 |
 |---|---|---|---|
-| `client.js` | 662 KB | Electron 渲染进程的界面。整个文件是一个 `window.__ModuleLoader__.load({...})` 工厂 | 手机 node 进程没有 `window`，第一句就 ReferenceError |
+| `client.js` | 662 KB | Electron 渲染进程的界面。整个文件是一个 `window.__ModuleLoader__.load({...})` 工厂 | **在引擎 node 进程里**没有 `window`，第一句就 ReferenceError（在浏览器里能跑，但 dsh-go 不加载它——见 3.2 ② 的三环境对照） |
 | `packages/purge-panel/` | 56 个文件 / 661 KB 的 client.js | 独立 npm 包 `dsh-purge-panel` v1.1.2：Purge 的 Web 界面，声明 `platform: "web"`，靠注入 `@deepseek-ai/dsh-client-connection` / `dsh-client-runtime` / `dsh-client-locale` / `dsh-client-ui-slots` 挂到宿主 | **试过，最后放弃**。UI 能挂上（把 `inject` 换成 `ui-renderer` 后重新构建，产物字节数和原版一致），但 9 个后端端点全缺、要自己在 `webServer` 上重写，中间还踩了把 `GET /` 吞掉导致 App 连不上的坑。完整经过见 [12.1](#121-不做-web-控制面板试过放弃了) |
 | `desktop.js` | 83 KB | 桌面宿主适配：识别 Electron、判断路径是否落在 `app.asar` 内、定位 `resources` 目录、按可执行文件名区分官方 Harness 与第三方 DSH Desktop、清理旧版 restart 脚本 | Android 上没有 `app.asar`、没有 `Resources/`、可执行文件不是 `.exe` |
 | `extract-asar.js` | 15 KB | 解 Electron 的 `app.asar` 归档：改名挪走归档、探测 asar 路径映射、判断「这个路径会不会被 Electron 映射进归档」 | 手机端根本没有 asar 归档 |
@@ -290,7 +290,7 @@ Error [ERR_MODULE_NOT_FOUND]: Cannot find module
 > 注：社区版 v1.6.93 的 `lib/core.js` 已缩到 177 KB（补丁表拆去 `lib/patches/` 了），
 > 但仍然 import 着 `desktop.js` 等模块，手机端的结论不变。
 
-**② `client.js`（662 KB）在手机上根本没有运行环境**
+**② `client.js` 在引擎进程里跑不了**
 
 文件开头第一行：
 
@@ -298,8 +298,20 @@ Error [ERR_MODULE_NOT_FOUND]: Cannot find module
 window.__ModuleLoader__.load({ id: "dsh-purge", factory: (require) => {
 ```
 
-它依赖浏览器 / Electron 的 `window.__ModuleLoader__`。手机上的 node 进程**没有 `window`**，
-这行第一句就已经 `ReferenceError`。
+它依赖 `window.__ModuleLoader__`。**引擎的 node 进程里没有 `window`**，这行第一句就 `ReferenceError`。
+
+**但这句话只对「引擎进程」成立，别套到别的地方去。** 三个执行环境要分清：
+
+| 环境 | 有 `window` 吗 | 会加载 `client.js` 吗 | 结论 |
+|---|---|---|---|
+| **引擎 node 进程** | ❌ | ❌ | 加载即崩，本节说的就是这个 |
+| **Web UI**（浏览器打开 `127.0.0.1:3080`） | ✅ | ✅ | **能挂上**——[12.1](#121-不做-web-控制面板试过放弃了) 里「右侧栏出现入口、标签页正常渲染」就是这里 |
+| **dsh-go App**（Flutter 原生界面） | — | ❌ | **看不到**——不加载 Web client 模块，见 [19.5](#195-dsh-go-界面上看不到-web-控制台实测) |
+
+所以 12.1 的「能挂上」和本节、和 19.5 都不冲突：**12.1 说的是浏览器，本节说的是引擎进程，
+19.5 说的是 Flutter 界面。** 三件事，三个环境。
+
+12.1 最后放弃的原因也不是「挂不上」，而是**挂上了但后端 9 个端点全缺**，要自己重写。
 
 **③ 红队子系统要单独装（0.4.0 已解决）**
 
@@ -624,6 +636,11 @@ subagent-types           →  dsh-subagent
 661 KB 的打包产物），是个 React 写的 Web 界面，能看补丁状态、点按钮应用/回滚。
 
 **试过移植，技术上能挂上，但代价太大，最后放弃。** 下面是完整经过，省得后来人再走一遍。
+
+> **先说清一个容易混的点**：下面说的「挂上」全部指 **Web UI**（浏览器打开 `127.0.0.1:3080`）。
+> 那不是 dsh-go 的界面——dsh-go 是 Flutter 原生，不加载 Web client 模块，
+> 面板在它上面看不到（见 [19.5](#195-dsh-go-界面上看不到-web-控制台实测)）。
+> 所以「面板能挂」和「dsh-go 看不到面板」两句话同时成立，不矛盾。
 
 **能成的部分**
 
