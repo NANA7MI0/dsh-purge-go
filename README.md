@@ -987,6 +987,18 @@ ESM 按真实路径解析，链接到 `~/tools/` 之类的位置后 `import '@de
 那份 `client.js` 走的是 DSH **Web UI 的 slot 机制**（`dsh-client-ui-*` 那套），
 dsh-go 的对话界面是 **Flutter 原生**，不加载 Web slot，所以不会渲染。
 
+**这跟 [12.1 不做 Web 控制面板](#121-不做-web-控制面板试过放弃了) 说的不矛盾，是两个场景。**
+
+| 场景 | 会不会加载 `client.js` |
+|---|---|
+| **Web UI**（浏览器打开 `127.0.0.1:3080`） | ✅ 会。12.1 里破甲面板「右侧栏出现入口、标签页正常渲染」，说的就是这个场景 |
+| **dsh-go App**（Flutter 原生界面） | ❌ **不会**。`window.__ModuleLoader__` 在这个进程里根本不存在 |
+
+**补充一个红队自己的问题**：它的 `dsh.client.inject` 是**空数组**，而 `client.js` 头部写着
+「只用平台 seed 里的 react 与 `ctx.slots`」——**没声明依赖 `dsh-client-ui-slots`**。
+所以它在 Web UI 上也挂不上，得先补 `inject`（破甲面板当初就是把 `inject` 换成
+`dsh-client-ui-renderer` 才挂上的）。**但这跟 dsh-go 无关——dsh-go 压根不跑这段代码。**
+
 **影响：只少了一个可视化面板，数据层完全不受影响。**
 
 面板的每个页签背后都只是调 `redteam_*` 工具读 SQLite。没有面板，直接在对话里让 AI 调工具，
