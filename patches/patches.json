@@ -101,7 +101,10 @@
     ],
     "replacements": [
       {
-        "pattern": {},
+        "pattern": {
+          "source": "These instructions are ACTIVE and MANDATORY for the stated scope\\.[\\s\\S]*?`",
+          "flags": "g"
+        },
         "replace": "Use them as guidance when relevant; more specific instructions take precedence. They do not override system, developer, or direct user instructions.`"
       }
     ],
@@ -238,7 +241,10 @@
     ],
     "replacements": [
       {
-        "pattern": {},
+        "pattern": {
+          "source": "\\n[ \\t]*\\* Network access depends on the task environment\\. Prefer configured mirrors\\/proxies when they are available\\.\\n",
+          "flags": ""
+        },
         "replace": "\n"
       }
     ],
@@ -622,7 +628,10 @@
     "softSettle": true,
     "replacements": [
       {
-        "pattern": {},
+        "pattern": {
+          "source": "(name: ['\"]@deepseek-ai\\/dsh-bash-sandbox['\"][^\\n]*\\n(?:(?! {0,4}\\S)[^\\n]*\\n)*? {8}timeoutMs: )60{5,}[ \\t]*(?:#|\\/\\/)[ \\t]*\\[dsh-purge\\] bash timeout raised[ \\t]*(?=\\n|$)",
+          "flags": "g"
+        },
         "replace": "$160000"
       }
     ],

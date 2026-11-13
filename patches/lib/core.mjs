@@ -82,11 +82,51 @@ export function relOf(p) {
   return ["lib", "index.js"];
 }
 
+/**
+ * 把 patches.json 里的一条 replacement 转成内部 edit 对象。
+ *
+ * pattern 有两种写法：
+ *  - 字符串：纯字面量，用 split/join 匹配（历史写法，全表绝大多数）
+ *  - { source, flags }：正则。上游 kingcharleslzy-ai/dsh-purge 的表里 pattern 就是 RegExp，
+ *    导出成 JSON 时会退化成 {}，所以这里也接受对象形式，把正则还原回来。
+ */
+function toEdit(r) {
+  if (!r || typeof r.replace !== "string") return null;
+  const p = r.pattern;
+  if (typeof p === "string" && p.length > 0) return { pat: p, rep: r.replace };
+  if (p && typeof p === "object" && typeof p.source === "string" && p.source.length > 0) {
+    const flags = typeof p.flags === "string" ? p.flags : "g";
+    return { pat: p.source, rep: r.replace, re: { source: p.source, flags } };
+  }
+  return null;
+}
+
+/** 这条 edit 是不是正则形态。 */
+export function isRegexEdit(e) {
+  return Boolean(e && e.re && typeof e.re.source === "string");
+}
+
+/** 造一个带 g 标志的正则，用来数命中次数。 */
+function globalRegex(e) {
+  const flags = e.re.flags.includes("g") ? e.re.flags : e.re.flags + "g";
+  return new RegExp(e.re.source, flags);
+}
+
+/** 这条 edit 在文本里还剩几处没打。字符串走 split，正则走 match。 */
+export function countHits(e, text) {
+  if (isRegexEdit(e)) {
+    const m = text.match(globalRegex(e));
+    return m ? m.length : 0;
+  }
+  return text.split(e.pat).length - 1;
+}
+
 export function editsOf(p) {
   const out = [];
   if (Array.isArray(p.replacements)) {
     for (const r of p.replacements) {
-      if (typeof r.pattern === "string" && typeof r.replace === "string") out.push({ pat: r.pattern, rep: r.replace });
+      const e = toEdit(r);
+      if (e) out.push(e);
     }
   }
   if (Array.isArray(p.patterns) && typeof p.replace === "string") {
@@ -120,6 +160,11 @@ export function marked(p, text) {
  */
 export function isDone(e, text) {
   const rep = e.rep || "";
+  // 正则形态：pattern 还在文件里 = 还没打；pattern 不在 = 已打。
+  // 正则里的 replace 通常带 $1 之类分组，没法用「rep 含 pat」那套判断。
+  if (isRegexEdit(e)) {
+    return !new RegExp(e.re.source, e.re.flags).test(text);
+  }
   // rep 与 pat 一模一样：这条补丁不改变任何文本（幂等标记型，全表共 3 条）。
   // 替换了等于没替换，所以永远算作「无需处理」——否则它会一直卡在 partial。
   if (rep === e.pat) return true;
@@ -352,6 +397,13 @@ export function apply(root, opts = {}) {
     let text = fs.readFileSync(file, "utf8");
     for (const j of jobs) {
       for (const e of j.edits) {
+        if (isRegexEdit(e)) {
+          // 正则形态：走 String.replace，$1 这类分组由它自己展开。
+          const re = new RegExp(e.re.source, e.re.flags);
+          const next = text.replace(re, e.rep);
+          if (next !== text) text = next;
+          continue;
+        }
         const parts = text.split(e.pat);
         if (parts.length > 1) text = parts.join(e.rep);
       }
