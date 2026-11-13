@@ -76,6 +76,15 @@ export function candidatesFor(p, pkgs) {
   return [...new Set(out)];
 }
 
+export function relsOf(p, pkg) {
+  const out = [];
+  if (Array.isArray(p.rels)) out.push(...p.rels);
+  const byPkg = p.relByPkg;
+  if (byPkg && typeof byPkg === "object" && pkg && typeof byPkg[pkg] === "string") out.push(byPkg[pkg]);
+  if (!out.length) return [relOf(p)];
+  return out.map((r) => String(r).split("/").filter(Boolean));
+}
+
 export function relOf(p) {
   if (Array.isArray(p.rel)) return p.rel;
   if (typeof p.rel === "string") return p.rel.split("/").filter(Boolean);
@@ -127,17 +136,48 @@ export function isDone(e, text) {
   return !text.includes(e.pat);
 }
 
+/**
+ * 效果是否真的落地。
+ *
+ * isDone 只回答「还需不需要打」——pattern 不在就算不需要。可是引擎换版后 pattern 也会
+ * 凭空消失，单看它会把「从没打上」误判成「已经打好」。这里改成看**替换后的文本**，
+ * 只有它出现在文件里才算真打过；两者都不在，就是 drifted（需要重锚）。
+ */
+export function effectPresent(e, text) {
+  const rep = e.rep || "";
+  if (rep === e.pat) return true; // 幂等标记型，无需处理
+  return rep !== "" && text.includes(rep);
+}
+
 export function probe(root, patches) {
   const table = patches || loadPatches(resolvePatchesFile());
   const pkgs = listPkgs(root);
   const rows = [];
   for (const p of table) {
+    if (p.obsolete) { rows.push({ id: p.id, name: p.name, status: "obsolete" }); continue; }
     const cands = candidatesFor(p, pkgs);
-    if (!cands.length) { rows.push({ id: p.id, name: p.name, status: "no_pkg" }); continue; }
-    const rel = relOf(p);
+    const hasAbs = (Array.isArray(p.paths) && p.paths.length) || (Array.isArray(p.peerPaths) && p.peerPaths.length);
+    if (!cands.length && !hasAbs) { rows.push({ id: p.id, name: p.name, status: "no_pkg" }); continue; }
     const edits = editsOf(p);
-    const hitsRows = [];
+    let hitsRows = [];
+    const absList = [];
+    if (Array.isArray(p.paths)) absList.push(...p.paths);
+    // peerPaths：相对 root 的上级目录（同级的 @earendil-works 等）
+    if (Array.isArray(p.peerPaths)) for (const rel of p.peerPaths) absList.push(path.join(path.dirname(root), rel));
+    const absFiles = absList.filter((f) => typeof f === "string" && fs.existsSync(f));
+    for (const abs of absFiles) {
+      const text = fs.readFileSync(abs, "utf8");
+      if (!edits.length) { hitsRows.push({ status: "no_needle", pkg: "-", file: abs }); continue; }
+      const hits = edits.filter((e) => !isDone(e, text)).length;
+      const hasMarker = marked(p, text);
+      let st;
+      if (hits === 0) st = hasMarker || edits.every((e) => effectPresent(e, text)) ? "applied" : "miss";
+      else if (hits === edits.length) st = hasMarker ? "drifted" : "hit";
+      else st = "partial";
+      hitsRows.push({ status: st, pkg: "-", file: abs, hits, total: edits.length, marker: hasMarker });
+    }
     for (const pkg of cands) {
+      for (const rel of relsOf(p, pkg)) {
       const file = path.join(root, pkg, ...rel);
       if (!fs.existsSync(file) || !fs.statSync(file).isFile()) continue;
       const text = fs.readFileSync(file, "utf8");
@@ -149,10 +189,12 @@ export function probe(root, patches) {
       // 判定以前置条件为准：pattern 还剩几个说了算，marker 只用来区分「打过又被覆盖」和「从没打过」。
       // 旧逻辑「marker 命中即 applied」会让打了 1/3 的补丁显示成已生效（实测 #17 三缺二、#42 十二缺四）。
       let st;
-      if (hits === 0) {
+      if (p.judgeByMarker) {
+        st = hasMarker ? "applied" : (hits === 0 ? "miss" : "hit");
+      } else if (hits === 0) {
         // 全部 pattern 都不在了。有 marker 才是我们打的；没有就是「本来就不需要打」，
         // 不能算 applied——否则 applied 会虚高（实测 #56/#63 属于这种）。
-        st = hasMarker ? "applied" : "miss";
+        st = hasMarker || edits.every((e) => effectPresent(e, text)) ? "applied" : "miss";
       } else if (hits === edits.length) {
         // 一个都没被替换：有 marker 说明以前打过但被引擎升级冲掉了，没 marker 就是从未打过
         st = hasMarker ? "drifted" : "hit";
@@ -160,9 +202,17 @@ export function probe(root, patches) {
         st = "partial"; // 打了一部分
       }
       hitsRows.push({ status: st, pkg, file, hits, total: edits.length, marker: hasMarker });
+      }
+    }
+    // 只把「真的带这个补丁」的文件算进聚合：一条 needle 都不命中、也没有 marker/产物，
+    // 说明这个目标文件根本不含这段文案（多半是别名/rels 多带进来的），不能拖累整条补丁。
+    if (hitsRows.length > 1) {
+      const related = hitsRows.filter((r) => r.marker || r.status !== "miss");
+      if (related.length) hitsRows = related;
     }
     if (!hitsRows.length) { rows.push({ id: p.id, name: p.name, status: "no_file", pkg: cands.join(",") }); continue; }
-    const rank = { hit: 4, drifted: 3, partial: 2, applied: 1, miss: 0, no_needle: 0 };
+    // 聚合取「还剩多少活」最重的那个：miss/hit/partial/drifted 都不能被 applied 掩盖。
+    const rank = { hit: 5, partial: 4, drifted: 3, miss: 2, no_needle: 2, applied: 0 };
     let top = hitsRows[0];
     for (const r of hitsRows) if ((rank[r.status] ?? 0) > (rank[top.status] ?? 0)) top = r;
     const allApplied = hitsRows.every((r) => r.status === "applied");
