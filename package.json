@@ -1,7 +1,7 @@
 {
   "name": "dsh-purge-go",
-  "version": "0.4.0",
-  "description": "把 dsh-purge 移植适配到 dsh-go：提示词注入层（LanJinGod 实现）+ 87 条引擎源码补丁，附 5 个操作工具",
+  "version": "0.5.0",
+  "description": "把 dsh-purge 移植适配到 dsh-go：提示词注入层（LanJinGod 实现）+ 87 条引擎源码补丁，附 5 个操作工具、2 个胶囊、状态条与 4 个原生面板",
   "type": "module",
   "main": "lib/index.js",
   "exports": {
@@ -52,16 +52,116 @@
     "contributes": {
       "composer.actions": [
         {
-          "id": "purge-status",
+          "id": "purge-open",
           "label": {
-            "zh": "破甲状态",
-            "en": "Status"
+            "zh": "破甲",
+            "en": "Purge"
           },
           "icon": "wrench",
           "effect": {
-            "type": "insert",
-            "text": "把破甲两层状态报给我：提示词注入层（开关/正文体积/变体）+ 补丁层（87 条的生效数与分布）（调 purge_status）"
+            "type": "open",
+            "page": "panel:purge-status"
           }
+        },
+        {
+          "id": "purge-toggle",
+          "label": {
+            "zh": "注入",
+            "en": "Inject"
+          },
+          "icon": "bolt"
+        }
+      ],
+      "composer.strip": [
+        {
+          "id": "purge-strip",
+          "icon": "wrench",
+          "text": {
+            "zh": "破甲",
+            "en": "Purge"
+          },
+          "panel": "purge-status"
+        }
+      ],
+      "panels": [
+        {
+          "id": "purge-status",
+          "title": {
+            "zh": "破甲状态",
+            "en": "Purge"
+          },
+          "icon": "wrench",
+          "placement": [
+            "session.tab",
+            "features",
+            "chat.panel"
+          ]
+        },
+        {
+          "id": "purge-patches",
+          "title": {
+            "zh": "补丁层",
+            "en": "Patches"
+          },
+          "icon": "code",
+          "placement": [
+            "session.tab",
+            "features"
+          ]
+        },
+        {
+          "id": "purge-prompt",
+          "title": {
+            "zh": "注入正文",
+            "en": "Prompt"
+          },
+          "icon": "document",
+          "placement": [
+            "session.tab",
+            "features"
+          ]
+        },
+        {
+          "id": "purge-cats",
+          "title": {
+            "zh": "题材分类",
+            "en": "Categories"
+          },
+          "icon": "list",
+          "placement": [
+            "session.tab",
+            "features"
+          ]
+        }
+      ],
+      "composer.tools": [
+        {
+          "id": "purge-tool-prompt",
+          "label": {
+            "zh": "正文",
+            "en": "Prompt"
+          },
+          "icon": "document",
+          "panel": "purge-prompt"
+        },
+        {
+          "id": "purge-tool-patches",
+          "label": {
+            "zh": "补丁",
+            "en": "Patches"
+          },
+          "icon": "code",
+          "panel": "purge-patches"
+        }
+      ],
+      "session.actions": [
+        {
+          "id": "purge-report",
+          "label": {
+            "zh": "破甲报告",
+            "en": "Report"
+          },
+          "icon": "summary"
         }
       ]
     }

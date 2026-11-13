@@ -71,18 +71,14 @@ test('apply：注册三个段、三个事件、四个工具、一条命令、原
   }
   assert.equal(record.commands[0].name, 'purge')
 
-  // 面板与状态条都改用清单静态字段：bridge.panel() 和 bridge.strip() 在当前 App 版本
-  // 都是空实现——调用不报错，但 App 侧永远报「插件还没处理这一项」。
-  // 实验段会用 {view} 对象尝试注册一次 purge 面板（路径 D），所以这里允许出现一次。
-  assert.ok(record.panels.length <= 1, '实验最多注册一个面板')
-  // 注意：native.js 里有一段「桥接实验」，会分别用两条路径注册一次 state，
-  // 所以这里能看到 state。它只是实验，不影响清单里 composer.strip 用静态 text。
-  assert.ok(record.strips.length <= 2, '实验最多注册两个状态条（路径 A 与 C）')
-  // 0.4.x：加号工具（composer.tools）已删，只留一个胶囊，点了报两层状态。
-  // 胶囊是静态 effect:insert，App 直接执行，不需要 on() handler，所以这里是空数组。
-  assert.deepEqual(record.actions, [], '不再注册任何 on() handler')
-  assert.deepEqual(record.strips, [], '状态条已移除')
-  assert.deepEqual(record.panels, [], '面板已确认在 dsh-go 上不显示，不再注册')
+  // 0.5.0：原生界面真的接上了——状态条 1 条、面板 4 个、点按处理 2 个（胶囊「注入」+ 会话动作「破甲报告」）。
+  assert.deepEqual(record.strips.map((entry) => entry.id), ['purge-strip'])
+  assert.deepEqual(record.panels.map((entry) => entry.id), ['purge-status', 'purge-patches', 'purge-prompt', 'purge-cats'])
+  assert.deepEqual(record.actions.map((entry) => entry.id).sort(), ['purge-report', 'purge-toggle'])
+  for (const panel of record.panels) {
+    assert.equal(typeof panel.options.view, 'function', `${panel.id} 缺 view`)
+    assert.ok(Object.keys(panel.options.actions || {}).length >= 2, `${panel.id} 的动作太少`)
+  }
 
   // 地区门与拒答续跑都要真的挂上：pre-step 两个（mnemon 过滤 + 地区门），status 一个
   const preSteps = record.events.filter((entry) => entry.event === 'agent/pre-step')
