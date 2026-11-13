@@ -5,6 +5,9 @@
 #   sh install.sh --plugin-only   只装插件，不打补丁（注入层生效，引擎限制仍在）
 #   sh install.sh --dry           只扫描 + 预演补丁，什么都不改
 #   sh install.sh --profile web   指定 profile（默认 web）
+#
+# 注意：每次更新 App（装新版 APK）都会重装引擎包、把补丁冲掉，
+#       之后要重跑一次本脚本，或者跟插件说一句「重打补丁」。
 set -e
 
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -119,6 +122,10 @@ say ""
 say "  am force-stop io.github.ccch1mneyyy.dsh_app"
 say ""
 say "  然后重新打开 App。（光退出界面不算重启）"
+say ""
+say "▸ 记住一件事"
+say "  以后每次更新 App 都会重装引擎包、把补丁冲掉。"
+say "  到时候重跑一次本脚本，或者跟插件说一句「重打补丁」。"
 say ""
 say "▸ 想撤销"
 say "  cd $HERE"

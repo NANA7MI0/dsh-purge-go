@@ -382,6 +382,12 @@ dsh: nothing was installed.
 
 ## 5. 安装
 
+> **⚠️ 装完要记住一条：以后每次更新 App，都要重打一次补丁。**
+>
+> App 更新会重新铺一遍引擎包（`/opt/dsh/node_modules/@deepseek-ai/`），补丁被整个冲掉。
+> 你不用做任何事、只是装个新版 APK，破甲就只剩注入层了。
+> 判断方法：点输入框上方的「破甲状态」胶囊，顶部冒出红字就是中招了，说一句「重打补丁」即可。详见 [16. 升级引擎 / 更新 App 之后](#16-升级引擎--更新-app-之后)。
+
 > 这里只装**破甲**。红队是独立的包、独立的装法，见 [18. 配套红队插件](#18-配套红队插件)。
 
 **一条命令装两层**（推荐）：
@@ -778,7 +784,7 @@ subagent-types           →  dsh-subagent
   旧会话里那条旧 system 还在，注入顶不动它。
 2. **压缩会重发基线**。上下文压缩之后官方弱句可能把强开场顶回去，建议同时把
   `dsh-agent-instructions` 的 `REPLACEMENT_*` / `COMPACT_*` 常量一起换掉。
-3. **补丁改的是 `node_modules`**，升级引擎会被覆盖，升级后要重跑 `probe` + `apply`。
+3. **补丁改的是 `node_modules`**。**升级引擎、或者装新版 App，都会把它整个重装一遍、补丁全丢**——App 的更新流程会重新铺 `@deepseek-ai/*`，跟你有没有动过它无关。之后要重跑 `probe` + `apply`（见 §16）。
 4. **`node --check` 只验语法不验语义**——保证不把文件改坏，保证不了行为对。
 
 ### 13.1 换用别的模型（API）会怎样
@@ -979,9 +985,30 @@ am force-stop io.github.ccch1mneyyy.dsh_app
 
 ---
 
-## 16. 升级引擎之后
+## 16. 升级引擎 / 更新 App 之后
 
-升级会覆盖整个 `node_modules`，补丁全丢。别急着 `apply`：
+**两种情况都会让补丁失效**：
+
+- **升级引擎**：自己跑 `npm install`、或按 §15 还原
+- **更新 App**：从 GitHub 装新版 APK。App 启动时会重新铺一遍 `/opt/dsh/node_modules/@deepseek-ai/`，实测 333 个包的时间戳全部刷新、补丁一条不剩。**这一点最容易被忽略**——你什么都没干，只是装了个新版 App，破甲就剩一半了。
+
+**怎么知道自己中招了**：点输入框上方的「破甲状态」胶囊，顶部出现红字
+
+```
+⚠️ 破甲异常：补丁层被覆盖了
+  当前只有 1/87 条生效（正常在 40 条以上）
+```
+
+就说明补丁被冲掉了。注入层不受影响（走官方扩展点），失效的只有补丁层。
+
+**修复**：说一句「重打补丁」让插件调 `purge_patch_apply`，或者手动跑:
+
+```sh
+cd ~/dsh-go-purge && node patches/purge-patch.mjs apply
+am force-stop io.github.ccch1mneyyy.dsh_app   # 重启才生效
+```
+
+打之前建议先 `probe` 看一眼。**别急着 `apply`**：
 
 ```sh
 node patches/purge-patch.mjs probe
