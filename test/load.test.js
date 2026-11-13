@@ -14,6 +14,8 @@ function fakeHost() {
   const systemPrompt = { section: (section) => record.sections.push(section) }
   const base = {
     systemPrompt,
+    // tools 现在由顶层 inject 保证就绪，apply 里直接 ctx.tools.register()
+    tools: { register: (definition) => record.tools.push(definition) },
     on: (event, handler, options) => record.events.push({ event, handler, options }),
     inject: (names, callback) => {
       const scoped = {
@@ -41,7 +43,7 @@ function tempHome() {
 
 test('导出形状：name / inject / apply', () => {
   assert.equal(pluginName, 'dsh-purge-go')
-  assert.deepEqual(pluginInject, ['systemPrompt'])
+  assert.deepEqual(pluginInject, ['systemPrompt', 'tools'])
   assert.equal(typeof apply, 'function')
 })
 
