@@ -21,7 +21,7 @@ while [ $# -gt 0 ]; do
     --profile)     PROFILE=$2; shift 2 ;;
     --profile=*)   PROFILE=${1#--profile=}; shift ;;
     -h|--help)
-      sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
       exit 0 ;;
     *) printf '✖ 不认识的参数：%s\n' "$1" >&2; exit 1 ;;
   esac
