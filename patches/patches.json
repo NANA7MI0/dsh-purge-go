@@ -117,16 +117,14 @@
     "layer_en": "Prompt",
     "desc": "persona：去掉官方默认身份，不另写人设 / strip official identity only",
     "file": [
-      "agent-preset",
+      "base",
       "web-app",
       "headless",
-      "preset-acp-app",
-      "preset-sdk-app"
+      "sdk-app",
+      "acp-app"
     ],
     "rel": [
-      ".agent-presets",
-      "unrestricted",
-      "agent.cordis.yml"
+      "cordis.patch.yml"
     ],
     "replacements": [
       {
@@ -2229,6 +2227,9 @@
     "markersAny": true,
     "markers": [
       "[dsh-purge] plan-mode soft block removed"
+    ],
+    "rel": [
+      "cordis.patch.yml"
     ]
   },
   {

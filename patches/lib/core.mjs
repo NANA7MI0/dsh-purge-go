@@ -20,7 +20,7 @@ import { createHash } from "node:crypto";
 export const ALIAS = {
   escalation: ["dsh-escalation", "dsh-permission-escalation", "dsh-tool-escalation"],
   "auto-review": ["dsh-experimental-auto-review", "dsh-auto-review"],
-  "conversation-client": ["dsh-conversation-client", "dsh-client-ui-chat"],
+  "conversation-client": ["dsh-conversation-client", "dsh-client-ui-conversation", "dsh-client-ui-chat"],
   "web-app-lib": ["dsh-web-app"],
   "deliverables-prompt": ["dsh-deliverables", "dsh-deliverables-prompt"],
   "hooks-claude-code": ["dsh-hooks-claude-code", "dsh-hook-claude-code"],
