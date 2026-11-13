@@ -65,7 +65,7 @@ test('apply：注册三个段、三个事件、四个工具、一条命令、原
     'system-prompt/assemble',
   ])
 
-  assert.deepEqual(record.tools.map((tool) => tool.name).sort(), ['purge_apply', 'purge_category', 'purge_prompt', 'purge_revert', 'purge_status'])
+  assert.deepEqual(record.tools.map((tool) => tool.name).sort(), ['purge_apply', 'purge_category', 'purge_patch_apply', 'purge_prompt', 'purge_revert', 'purge_status'])
   for (const tool of record.tools) {
     assert.equal(tool.parameters.type, 'object')
     assert.equal(typeof tool.output.render, 'function')
