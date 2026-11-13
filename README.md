@@ -1158,7 +1158,8 @@ def = await skills.get(summary.name, skillLookup)
 - [18. 配套红队插件](#18-配套红队插件)
 - [19. 目录](#19-目录)
 - [20. 文件结构](#20-文件结构)
-- [21. 更新日志](#21-更新日志)
+- [21. 改包名要同步五处](#21-改包名要同步五处)
+- [22. 更新日志](#22-更新日志)
 
 ---
 
@@ -1194,7 +1195,35 @@ README.md         本文
 
 ---
 
-## 21. 更新日志
+## 21. 改包名要同步五处
+
+**这一节给改仓库的人看。** 漏一处就会出现「工具能用、胶囊没了」这种半死状态。
+
+包名出现在五个地方，必须同时改：
+
+| # | 位置 | 容易漏的原因 |
+|---|---|---|
+| 1 | `package.json` 的 `name` | 这个最容易想起来 |
+| 2 | `cordis.patch.yml` 的 `id` 和 `name` | **最常漏**。文件自己的注释就写着「宿主按 name 去 node_modules 解析」，对不上就整个跳过装配，表现为**工具还在、胶囊消失** |
+| 3 | 装上之后的 profile：`~/.dsh/profiles/web/package.json` 的 `dependencies` key | 已经装好了才改包名时才会漏 |
+| 4 | 同上文件的 `dsh.profile.bundles` 数组 | 同上 |
+| 5 | `~/.dsh/profiles/web/node_modules/<name>` 这个链接目录的名字 | 同上 |
+
+**改完自查**（官方检查器，会直接告诉你 App 能不能画出胶囊）：
+
+```sh
+node ~/.dsh/skills/dsh-go-plugin/kit/bin/check.mjs ~/.dsh/dsh-go/plugins/<name>
+```
+
+看到 `原生界面能显示（胶囊 1）` 就说明没问题。
+
+**原生插件的目录位置**也容易搞错：胶囊这一类原生界面元素由 `$DSH_HOME/dsh-go/plugins/<name>/` 下的包决定，**不是** profile 的 `node_modules`。profile 那侧只是让引擎能加载它的代码。两边都要有，且名字一致。
+
+**胶囊是热加载的**：改完 `package.json` 或 `cordis.patch.yml`，不用重启引擎，App 会自己重读。
+
+---
+
+## 22. 更新日志
 
 ### 0.4.0
 
