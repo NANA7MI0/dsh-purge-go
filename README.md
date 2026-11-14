@@ -4,10 +4,10 @@
 
 **本仓库只做「破甲」这一件事**——提示词注入 + 引擎补丁，装完输入框上方只有 1 个胶囊，点它一次报两层的状态。
 **红队（靶标资产库 / 攻击链 / 63 个工具 / 41 篇技能）是另一个独立包**，不装也完全不影响破甲，
-想用的话见 [18. 配套红队插件](#17-配套红队插件)。
+想用的话见 [17. 配套红队插件](#17-配套红队插件)。
 
 > **只适配 DeepSeek。** 换别的模型不会报错，但破甲效果会打折扣——注入正文是按 DeepSeek 的格式写的。
-> 原版哪天支持了多模型，这里会跟着加。详见 [13.1](#121-换用别的模型api会怎样)。
+> 原版哪天支持了多模型，这里会跟着加。详见 [12.1](#121-换用别的模型api会怎样)。
 
 > ### 免责声明
 >
@@ -29,7 +29,7 @@
 >    "auto-granted"，`policy` 默认值从 `ask` 改成 `never`。
 > 2. **沙箱写权限放开**。`dsh-sandbox-local` 的 `deny file-write*` 变成 `allow`。
 >    （Android 上底层确实没拦——那套规则是 macOS 语法，手机没有执行后端。
->    但这句话是**给模型看的**，不改它会以为自己不能写。详见 [2.1 沙箱](#11-沙箱手机上和桌面上不是一回事)。）
+>    但这句话是**给模型看的**，不改它会以为自己不能写。详见 [1.1 沙箱](#11-沙箱手机上和桌面上不是一回事)。）
 >
 > **为什么没得选**：这两条补丁不是「顺手加的危险项」，是这套东西能不能用的前提。
 >
@@ -40,10 +40,10 @@
 >   于是不敢动手。
 >
 > 换句话说：**这两条不打开，这套东西就是个只会聊天的空壳。**
-> 完整论证见 [第 1 节](#6-为什么必须去掉审批和沙箱)。
+> 完整论证见 [第 6 章](#6-为什么必须去掉审批和沙箱)。
 >
 > **代价也很具体**：以后工具返回的网页、文档、日志里如果夹带指令，**没有第二道拦截**。
-> 想只留一半，见 [2.3 你得自己判断](#13-你得自己判断) 里的中间选项。
+> 想只留一半，见 [1.3 你得自己判断](#13-你得自己判断) 里的中间选项。
 
 ## 1. 破甲怎么实现的：注入层 + 补丁层
 
@@ -75,7 +75,7 @@
 | 压缩后的弱基线换成强基线 | 压缩一轮之后又变回官方口气 |
 
 > 最后一行是**手改**的，不在 `patches.json` 里——新机器跑 `apply` 得不到这一条，
-> 要自己动 `dsh-agent-instructions` 的常量。见 [13 已知限制](#12-已知限制)。
+> 要自己动 `dsh-agent-instructions` 的常量。见 [12 已知限制](#12-已知限制)。
 
 想验证这个判断，可以**只装插件、不跑补丁层的 `purge-patch.mjs apply`**，
 对比一下「能聊」和「能干」的差别。（注意：插件本身的「装好即生效」指的是注入层，
@@ -84,7 +84,7 @@
 **这两层各自的来源**：
 
 - **注入层**（`lib/`）直接引用 [LanJinGod/dsh-purge-go](https://github.com/LanJinGod/dsh-purge-go)，本仓库只做 dsh-go 侧的路径适配
-- **补丁层**（`patches/`）的 87 条数据导出自社区维护版 [kingcharleslzy-ai/dsh-purge](https://github.com/kingcharleslzy-ai/dsh-purge)（MIT），执行器和包名映射由本仓库实现
+- **补丁层**（`patches/`）的 86 条数据导出自社区维护版 [kingcharleslzy-ai/dsh-purge](https://github.com/kingcharleslzy-ai/dsh-purge)（MIT），执行器和包名映射由本仓库实现
 
 ### 1.1 沙箱：手机上和桌面上不是一回事
 
@@ -163,9 +163,9 @@ case "read-only":
 >
 > App 更新会重新铺一遍引擎包（`/opt/dsh/node_modules/@deepseek-ai/`），补丁被整个冲掉。
 > 你不用做任何事、只是装个新版 APK，破甲就只剩注入层了。
-> 判断方法：点输入框上方的「破甲状态」胶囊，顶部冒出红字就是中招了，说一句「重打补丁」即可。详见 [16. 升级引擎 / 更新 App 之后](#16-升级引擎-更新-app-之后)。
+> 判断方法：点输入框上方的「破甲状态」胶囊，顶部冒出红字就是中招了，说一句「重打补丁」即可。详见 [16. 升级引擎 / 更新 App 之后](#16-升级引擎--更新-app-之后)。
 
-> 这里只装**破甲**。红队是独立的包、独立的装法，见 [18. 配套红队插件](#17-配套红队插件)。
+> 这里只装**破甲**。红队是独立的包、独立的装法，见 [17. 配套红队插件](#17-配套红队插件)。
 
 **一条命令装两层**（推荐）：
 
@@ -220,7 +220,7 @@ Error: tool call aborted
 
 ```sh
 # 1. 插件进去了吗（有输出就说明装上了）
-node -p 'require(process.env.HOME+"/.dsh/profiles/web/package.json").dependencies["dsh-purge-go"]'
+node -p 'require(process.env.HOME+"/.dsh/profiles/web/package.json").dependencies["dsh-go-purge"]'
 
 # 2. 补丁打上了吗（看 applied 那一项）
 cd ~/dsh-purge-go && node patches/purge-patch.mjs probe
@@ -249,7 +249,7 @@ node patches/purge-patch.mjs apply   # 真打
 
 **只装插件不打补丁 = 只有一半。** 注入层能把官方身份段压掉，但引擎的审批和沙箱限制原样还在。
 
-补丁层会**改 32 个引擎包**、**必须重启引擎才生效**（重启会中断当前对话）。完整命令见 [8. 打补丁](#3-打补丁)。
+补丁层会**改 32 个引擎包**、**必须重启引擎才生效**（重启会中断当前对话）。完整命令见 [3. 打补丁](#3-打补丁)。
 
 ### 2.4 不用手动准备注入正文
 
@@ -268,14 +268,14 @@ am force-stop io.github.ccch1mneyyy.dsh_app
 或者手动：最近任务里把 App 划掉，再点图标打开。**光退出界面不算重启**，
 引擎进程还在内存里跑着，插件不会重新加载。
 
-**装完建议先看一眼 [14. 卸载插件](#14-卸载插件) 和 [15. 还原引擎](#15-还原引擎备份还在-备份没了)。**
+**装完建议先看一眼 [14. 卸载插件](#14-卸载插件) 和 [15. 还原引擎](#15-还原引擎备份还在--备份没了)。**
 这两章在 README 里，README 在仓库目录里——删仓库就一起没了，提前知道比事后找强。
 
 ---
 
 ## 3. 打补丁
 
-> **这是安装的第二步。** [第 5 章](#2-安装)只装了插件（注入层），补丁层要单独跑这一步才算完整破甲。
+> **这是安装的第二步。** [第 2 章](#2-安装)只装了插件（注入层），补丁层要单独跑这一步才算完整破甲。
 > 不打补丁的话，注入层照样生效，但引擎的审批和沙箱限制原样还在。
 >
 > 补丁会改 32 个引擎包、**必须重启引擎才生效**。
@@ -292,46 +292,28 @@ node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
 
 `--root` 或环境变量 `DSH_AI_ROOT` 可指定引擎包目录，默认自动探测。
 
-### 3.1 0.2.2-rc.1 上的实测分布
+### 3.1 实测分布
 
 | 状态 | 条数 | 意味着 |
 |---|---|---|
-| `applied` | **45** | 所有目标包都打过了 |
+| `applied` | **55** | 所有目标包都打过了 |
 | `no_pkg` | 29 | 桌面壳、OAuth、preset 那类包，手机上没有 |
-| `partial` | 6 | 只命中部分查找串（多目标补丁里有的包已打、有的没打） |
-| `no_needle` | 3 | 数据里这条的 pattern 是空的，命中不了 |
-| `hit` | 1 | 可以打但还没打 |
-| `miss` | 2 | 查找串对不上，版本不同 |
-| `no_file` | 1 | 包在但目标文件不在 |
+| `no_needle` | 1 | 数据里这条的 pattern 是空的（#77） |
+| `miss` | 1 | 查找串对不上（#56） |
 
-合计 87。换引擎版本后分布会变，先跑 `probe` 再决定。
+合计 86。换引擎版本后分布会变，先跑 `probe` 再决定。
 
-> **有 4 条在你这种干净安装上本来就不会命中，不是坏了：**
+**手机上有目标的是 58 条，已生效 55 条（94.8%）——破甲能力完整。** 那个百分比只是「条目打没打上」的计数，不是破甲强度的折扣。
+
+> **有 2 条在你这种干净安装上本来就不会命中，不是坏了：**
 >
 > | id | 名字 | 为什么打不上 |
 > |---|---|---|
-> | 3 | `SCOPE_INTRO` | 旧版引擎会把作用域强句重复叠加，补丁负责收回去；0.2.2-rc.1 上没有这句（实测 grep 0 处） |
-> | 21 | `BASH_TIMEOUT_RESTORE` | **仅迁移用**——只把带 `[dsh-purge]` 标记的 `timeoutMs: 600000` 改回 60000，干净安装没有这个标记 |
-> | 73 | `PRESET_BASH_MIRROR_LINE` | 目标那行早被 #70 的整段重写吃掉了，社区版注释里写明「pattern 再也不会命中」 |
-> | 77 | `REWIND_DROP_SENT_ON_APPEND` | 作用在 `conversation-client` 包，手机上没这个包 |
+> | 73 | `PRESET_BASH_MIRROR_LINE` | 目标包手机上没装 |
+> | 77 | `REWIND_DROP_SENT_ON_APPEND` | 作用在桌面端回退行为，手机走 Flutter 原生实现，不触发 |
 >
-> 这四条**都不影响破甲**——破甲靠的是注入层和审批/沙箱那批补丁，它们在正常工作的 45 条里。
+> 它们**都不影响破甲**——破甲靠的是注入层和审批/沙箱那批补丁，它们在正常工作那 55 条里。
 > `probe` 里看到它们只是「没有目标」，不是「数据坏了」。
->
-> 另外 **32 / 40 / 53** 少了部分替换项，能打但不完整（`probe` 里显示 `partial`）。
->
-> **关于两种数据格式**：`patches.json` 里有两种写法——
-> `replacements: [{pattern, replace}, ...]` 和旧式的 `patterns: [...] + replace: "..."`。
-> 执行器 `editsOf()` **两种都支持**，不是只有前者有效。5 / 6 / 7 / 8 / 10 / 15 / 16 这几条
-> 审批与沙箱的核心补丁用的就是旧式写法，实测全部 `applied`——别看到没有 `replacements`
-> 就以为它们坏了。
-
-> **关于多目标补丁**：`patches.json` 里有 58 条的 `file` 写成了数组，其中 33 条长度大于 1
-> （同一条要在多个包里打，其余 25 条是只含一个元素的数组）。
-> `probe` 会逐个包判定，**全部目标都打过才算 `applied`**——早期版本只看第一个包，
-> 会把这类补丁误报成已应用，实际数字偏高。现在的 45 是按全目标口径算的。
-
----
 
 ### 3.2 为什么有 29 条打不上
 
@@ -377,7 +359,7 @@ subagent-types           →  dsh-subagent
 
 所以 #5 这种现在显示的是 `applied`，不是 `no_pkg`。
 
-**一句话总结**：87 条里 45 条在手机上真能打，破甲靠的就是这批。
+**一句话总结**：86 条里 55 条在手机上真能打，破甲靠的就是这批。
 
 ---
 
@@ -425,7 +407,7 @@ cat ~/.dsh/dsh-purge/state.json            # 应该有 "enabled": true
 
 | 工具 | 干什么 |
 |---|---|
-| `purge_status` | **看两层状态**：注入层（开关、正文来源与体积、当前变体、按模型指定、上次组装压掉哪些官方段）+ 补丁层（引擎路径、87 条的生效数与状态分布） |
+| `purge_status` | **看两层状态**：注入层（开关、正文来源与体积、当前变体、按模型指定、上次组装压掉哪些官方段）+ 补丁层（引擎路径、86 条的生效数与状态分布） |
 | `purge_apply` | 重新开启破甲并确保正文存在。**装的时候已经自动做过一次**，只在关掉之后想重开、或正文丢了想补回来时用。`force=true` 覆盖重写 |
 | `purge_revert` | 关闭破甲，把当前正文备份到 `dsh-purge/backups/`（正文本身保留） |
 | `purge_prompt` | 读写注入正文与变体。`show` / `set` / `reset` / `use` / `default` / `map`（按模型指定变体） |
@@ -434,8 +416,8 @@ cat ~/.dsh/dsh-purge/state.json            # 应该有 "enabled": true
 除了工具，还注册了一个斜杠命令 `/purge`，可以直接在输入框敲：
 `/purge prompt set /sdcard/x.md`（从文件读正文）、`/purge status` 等。
 
-**除 `purge_status` 外，其余四个只管注入层。** 补丁（`patches.json` 那 87 条）没有对应的工具，
-只能在命令行打，见 [第 8 节 打补丁](#3-打补丁)。
+**除 `purge_status` 外，其余四个只管注入层。** 补丁（`patches.json` 那 86 条）没有对应的工具，
+只能在命令行打，见 [第 3 章 打补丁](#3-打补丁)。
 
 所以你想「让 AI 帮我开破甲」——直接说，它会调 `purge_apply`；
 想「把注入正文换成我自己写的」——用 `purge_prompt` 的 `set`；
@@ -467,8 +449,8 @@ cat ~/.dsh/dsh-purge/state.json            # 应该有 "enabled": true
 | #34 | 沙箱提示中性化 | 提示词 |
 | #36 | 文件系统升级 schema 放行 | 提示词 |
 
-这十条在本仓库的 87 条里**定义都在**；其中 #13 / #14 / #34 的目标包手机上不存在
-（`probe` 报 `no_pkg`），实际生效的是六条（#36 只命中部分替换串，其余五条完整）。也就是说，**dsh-purge 一直把"破甲"
+这十条在本仓库的 86 条里**定义都在**；其中 #13 / #14 / #34 的目标包手机上不存在
+（`probe` 报 `no_pkg`），实际生效的是七条（#36 也完整命中）。也就是说，**dsh-purge 一直把"破甲"
 定义成包括把审批和沙箱拿掉**——不是附加项，是组成部分。
 
 原版 `core.js` 里对应的定义（**id 编号是桌面版的，和本仓库的 `patches.json` 不是同一套**）：
@@ -512,7 +494,7 @@ dsh-purge 的选择是把 fail-closed 改成 fail-open——审批环节整个�
 这样命令能跑通，代价是**真的危险的操作也一样不问**。
 
 **所以取舍是**：要「接近原版的破甲」，就必须接受「没有第二道拦截」。两者是同一件事的两面，
-拆不开。想只留一半，见 [2.3 你得自己判断](#13-你得自己判断) 里的中间选项。
+拆不开。想只留一半，见 [1.3 你得自己判断](#13-你得自己判断) 里的中间选项。
 
 ---
 
@@ -531,7 +513,7 @@ dsh-purge 的选择是把 fail-closed 改成 fail-open——审批环节整个�
 
 ## 8. 关键补丁
 
-87 条覆盖提示词、代码、工具、兼容四类。最要紧的：
+86 条覆盖提示词、代码、工具、兼容四类。最要紧的：
 
 | id | 名字 | 改什么 |
 |---|---|---|
@@ -550,8 +532,8 @@ dsh-purge 的选择是把 fail-closed 改成 fail-open——审批环节整个�
 |---|---|---|
 | 目标 | PC 上的 DSH | dsh-go |
 | 注入方式 | 自带 `core.js`（177 KB，补丁表已拆去 `lib/patches/`），正则逐句改写 + `defineProperty` 劫持 | 官方 waterfall 整段丢弃 |
-| 规模 | 518 文件 / 305 个 js+mjs / 4.83 MB | **64 文件 / 0.84 MB** |
-| 补丁 | 自带（`lib/patches/` 拆成 6 个模块，83 条） | 导成 `patches.json`（87 条）+ 独立执行器 |
+| 规模 | 518 文件 / 305 个 js+mjs / 4.83 MB | **35 文件 / 605 KB** |
+| 补丁 | 自带（`lib/patches/` 拆成 6 个模块，83 条） | 导成 `patches.json`（86 条）+ 独立执行器 |
 | 桌面功能 | asar 解包、计划任务 | 无 |
 | 面板 | `packages/purge-panel/` 独立 Web 面板 | 无（试过移植，放弃） |
 | 许可 | MIT（社区版） | AGPL-3.0（因注入层是 AGPL） |
@@ -579,7 +561,7 @@ dsh-purge 的选择是把 fail-closed 改成 fail-open——审批环节整个�
 **砍完剩下的就是「破甲」这一件事**：让引擎组装系统提示时不再带官方身份，
 让执行动作时不再有东西拦着。这也是这个仓库存在的唯一理由。
 
-> 想看去掉的那部分原来干什么、实测怎么崩的，见 [21. 更新日志](#21-更新日志) 里 0.3.x 的记录。
+> 去掉的那些模块原本是 Electron / asar / Windows 控制台相关的宿主适配，Android 上没有对应对象，不是凭感觉删的。
 
 
 ## 11. 刻意不做的几件事
@@ -683,7 +665,7 @@ Electron、asar、Windows 控制台那套在 Android 上没有落点——详见
 | Node | 20+（用到 `node --check` 和 ESM） |
 | **包管理器** | **pnpm**（`dsh plugin` 底层就是调 pnpm，缺了会报 `dsh: pnpm was not found`） |
 | 运行时依赖 | 零。插件本身只用 Node 内置模块 |
-| 体积 | 64 个文件 / 0.84 MB（assets 里 250 KB 是 IP 段表） |
+| 体积 | 35 个文件 / 605 KB |
 
 **引擎版本边界**：`package.json` 里写的是 `engines.dsh: ">=0.2.1-rc.2 <0.3.0"`。
 引擎升到 0.3.x 之后 `dsh plugin add` 会**直接拒绝安装**：
@@ -693,7 +675,7 @@ dsh: installation rejected: Plugin ... is incompatible with dsh 0.3.x
 dsh: nothing was installed.
 ```
 
-真要试就加 `--allow-version`（`dsh plugin --profile web allow-version dsh-purge-go`），
+真要试就加 `--allow-version`（`dsh plugin --profile web allow-version dsh-go-purge`），
 但补丁层的查找串大概率对不上，先跑 `probe` 看命中率。
 
 别的引擎版本也是同理：**先 `probe`，别直接 `apply`**。
@@ -705,12 +687,12 @@ dsh: nothing was installed.
 > ### ⚠️ 先读这一段再动手
 >
 > **README 就在仓库目录里，`rm -rf ~/dsh-purge-go` 会把它一起删掉。**
-> 删之前请把本章和 [15. 还原引擎](#15-还原引擎备份还在-备份没了) 看完，或者先复制到别处。
+> 删之前请把本章和 [15. 还原引擎](#15-还原引擎备份还在--备份没了) 看完，或者先复制到别处。
 >
 > **最坏的情况是「仓库删了、备份也没了」**——那也不至于救不回来，
 > 第 15.2 节有一条不依赖仓库、不依赖备份的路子（按 `/opt/dsh/package-lock.json` 重装原版包）。
 
-**卸载有两层，漏掉补丁层等于没卸。** 很多人只做了第 ② 步就以为干净了，结果引擎源码里还留着 52 处改动。
+**卸载有两层，漏掉补丁层等于没卸。** 很多人只做了第 ② 步就以为干净了，结果引擎源码里还留着 55 条改动。
 
 ### 14.1 正确顺序
 
@@ -725,7 +707,7 @@ dsh plugin --profile web remove dsh-purge-go
 # ③ 删插件自己的文件
 rm -rf ~/dsh-purge-go
 rm -rf ~/.dsh/prompt-inject.md ~/.dsh/dsh-purge
-rm -rf ~/.dsh/profiles/web/node_modules/dsh-purge-go
+rm -rf ~/.dsh/profiles/web/node_modules/dsh-go-purge
 
 # ④ 重启引擎
 am force-stop io.github.ccch1mneyyy.dsh_app
@@ -756,7 +738,7 @@ grep -o 'actions that require approval are rejected automatically' \
 ls ~/.dsh/ | grep -i 'purge\|prompt-inject'   # 应该为空
 
 # 插件注册（应该输出 undefined）
-node -p 'require(process.env.HOME+"/.dsh/profiles/web/package.json").dependencies["dsh-purge-go"]'
+node -p 'require(process.env.HOME+"/.dsh/profiles/web/package.json").dependencies["dsh-go-purge"]'
 ```
 
 **别用 `probe` 的 `applied` / `partial` 数字判断是否卸干净。** 这两个状态在**原版系统上本来就会出现**——补丁表里很多 pattern 是不同版本的备选分支，原版只命中其中一部分。判断标准只有两条：**`grep` 搜不到 `dsh-purge`**，**关键文案是原版**。
@@ -873,7 +855,7 @@ am force-stop io.github.ccch1mneyyy.dsh_app
 
 ```
 ⚠️ 破甲异常：补丁层被覆盖了
-  当前只有 1/87 条生效（正常在 40 条以上）
+  当前只有 1/86 条生效（正常在 40 条以上）
 ```
 
 就说明补丁被冲掉了。注入层不受影响（走官方扩展点），失效的只有补丁层。
@@ -881,7 +863,7 @@ am force-stop io.github.ccch1mneyyy.dsh_app
 **修复**：说一句「重打补丁」让插件调 `purge_patch_apply`，或者手动跑:
 
 ```sh
-cd ~/dsh-go-purge && node patches/purge-patch.mjs apply
+cd ~/dsh-purge-go && node patches/purge-patch.mjs apply
 am force-stop io.github.ccch1mneyyy.dsh_app   # 重启才生效
 ```
 
@@ -980,7 +962,7 @@ VPS 地址（技能里还是 `<你的VPS_IP>` 占位符）、`toolkit/` 下的 `
 
 **章节**
 
-- [1. 破甲怎么实现的：注入层 + 补丁层](#1-破甲怎么实现的注入层-补丁层)
+- [1. 破甲怎么实现的：注入层 + 补丁层](#1-破甲怎么实现的注入层--补丁层)
 - [2. 安装](#2-安装)
 - [3. 打补丁](#3-打补丁)
 - [4. 装好即生效，怎么确认](#4-装好即生效怎么确认)
@@ -994,8 +976,8 @@ VPS 地址（技能里还是 `<你的VPS_IP>` 占位符）、`toolkit/` 下的 `
 - [12. 已知限制](#12-已知限制)
 - [13. 环境](#13-环境)
 - [14. 卸载插件](#14-卸载插件)
-- [15. 还原引擎（备份还在 / 备份没了）](#15-还原引擎备份还在-备份没了)
-- [16. 升级引擎 / 更新 App 之后](#16-升级引擎-更新-app-之后)
+- [15. 还原引擎（备份还在 / 备份没了）](#15-还原引擎备份还在--备份没了)
+- [16. 升级引擎 / 更新 App 之后](#16-升级引擎--更新-app-之后)
 - [17. 配套红队插件](#17-配套红队插件)
 - [18. 来源与许可](#18-来源与许可)
 - [19. 目录](#19-目录)
@@ -1007,11 +989,11 @@ VPS 地址（技能里还是 `<你的VPS_IP>` 占位符）、`toolkit/` 下的 `
 **文件**
 
 ```
-lib/              注入层 16 个模块（来自 LanJinGod）
-assets/           categories.json / default-prompt.md / net-scope-ranges.json
-patches/          patches.json（87 条）
+lib/              注入层 14 个模块（来自 LanJinGod）
+assets/           categories.json / default-prompt.md
+patches/          patches.json（86 条）
   purge-patch.mjs   CLI 壳（66 行，只做参数解析与输出）
-  lib/core.mjs      纯函数库（528 行：probe / apply / restore / isDone / verifyFile）
+  lib/core.mjs      纯函数库（580 行：probe / apply / restore / isDone / verifyFile）
 scripts/          engine-smoke.mjs（段注册与 assemble 重排验证）· kit-check.mjs（插件规范检查，需外部 plugin-kit）
 test/             7 组共 62 项测试
 cordis.patch.yml  插件插入声明
@@ -1021,11 +1003,11 @@ NOTICE            三部分来源与各自许可
 README.md         本文
 ```
 
-合计 **37 个文件、1.0 MB**。
+合计 **35 个文件、605 KB**。
 
 改 `lib/` 之后必须重启引擎；改 `package.json` 会被热读。
 
-> 红队的 `skills/` 和 `presets/` **不在本仓库**——那套是独立 bundle，见 [18. 配套红队插件](#17-配套红队插件)。
+> 红队的 `skills/` 和 `presets/` **不在本仓库**——那套是独立 bundle，见 [17. 配套红队插件](#17-配套红队插件)。
 > 早期版本带过 23 个技能和 3 个预设（238 KB）：0.3.2 删掉了，0.4.0 改成另外装，
 > 所以本仓库目录里不会再有它们。文件数与体积也跟着从 35 / 0.87 MB 变成 37 / 1.0 MB
 > （多了 `patches/lib/core.mjs` 和 `test/core.test.js`）。
