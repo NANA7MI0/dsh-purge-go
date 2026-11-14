@@ -337,7 +337,12 @@ export function apply(root, opts = {}) {
       // 判据改成逐条看：这个 pattern 还在不在。
       // 只挑「还没打」的：追加型补丁的 pattern 打完仍在文件里，
       // 不排除的话每次 apply 都会重复追加一遍。
-      const edits = editsOf(p).filter((e) => text.includes(e.pat) && !isDone(e, text));
+      // 正则形态的 e.pat 是正则源码，拿它做 includes 必然 false——
+      // 以前这里没区分，导致所有正则补丁在 apply 时被静默过滤掉，只有 probe 能看出「没打」。
+      const edits = editsOf(p).filter((e) => {
+        if (isRegexEdit(e)) return !isDone(e, text);
+        return text.includes(e.pat) && !isDone(e, text);
+      });
       if (!edits.length) continue;
       if (!byFile.has(file)) byFile.set(file, []);
       byFile.get(file).push({ id: r.id, name: r.name, edits });
