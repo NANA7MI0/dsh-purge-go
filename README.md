@@ -294,6 +294,8 @@ node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
 
 ### 3.1 实测分布
 
+> 下面这张表是 **dsh-go 0.2.2-rc.1 + dsh-go-purge 0.4.8、已 apply 过**的本机读数。你自己的机器可能不同，以 `probe` 为准。
+
 | 状态 | 条数 | 意味着 |
 |---|---|---|
 | `applied` | **55** | 所有目标包都打过了 |
@@ -303,13 +305,13 @@ node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
 
 合计 86。换引擎版本后分布会变，先跑 `probe` 再决定。
 
-**手机上有目标的是 58 条，已生效 55 条（94.8%）——破甲能力完整。** 那个百分比只是「条目打没打上」的计数，不是破甲强度的折扣。
+**手机上有目标的是 57 条（86 − 29），已生效 55 条（96.5%）——破甲能力完整。** 那个百分比只是「条目打没打上」的计数，不是破甲强度的折扣。
 
 > **有 2 条在你这种干净安装上本来就不会命中，不是坏了：**
 >
 > | id | 名字 | 为什么打不上 |
 > |---|---|---|
-> | 73 | `PRESET_BASH_MIRROR_LINE` | 目标包手机上没装 |
+> | 56 | `REWIND_HIDE_CUT_ONLY` | 目标包对上了，但里面没有那段代码——针对桌面 Web 端的回退行为，手机端实现不同 |
 > | 77 | `REWIND_DROP_SENT_ON_APPEND` | 作用在桌面端回退行为，手机走 Flutter 原生实现，不触发 |
 >
 > 它们**都不影响破甲**——破甲靠的是注入层和审批/沙箱那批补丁，它们在正常工作那 55 条里。
@@ -448,6 +450,8 @@ cat ~/.dsh/dsh-purge/state.json            # 应该有 "enabled": true
 | #16 | 文件系统围栏取消 | 代码 |
 | #34 | 沙箱提示中性化 | 提示词 |
 | #36 | 文件系统升级 schema 放行 | 提示词 |
+
+> 表里的 id 是**历史编号**，删掉的 #21 不再占用，所以会出现「86 条里编号到 93」的情况。
 
 这十条在本仓库的 86 条里**定义都在**；其中 #13 / #14 / #34 的目标包手机上不存在
 （`probe` 报 `no_pkg`），实际生效的是七条（#36 也完整命中）。也就是说，**dsh-purge 一直把"破甲"
@@ -702,7 +706,7 @@ cd ~/dsh-purge-go
 node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
 
 # ② 从 profile 摘掉插件
-dsh plugin --profile web remove dsh-purge-go
+dsh plugin --profile web remove dsh-go-purge
 
 # ③ 删插件自己的文件
 rm -rf ~/dsh-purge-go
@@ -1009,8 +1013,8 @@ README.md         本文
 
 > 红队的 `skills/` 和 `presets/` **不在本仓库**——那套是独立 bundle，见 [17. 配套红队插件](#17-配套红队插件)。
 > 早期版本带过 23 个技能和 3 个预设（238 KB）：0.3.2 删掉了，0.4.0 改成另外装，
-> 所以本仓库目录里不会再有它们。文件数与体积也跟着从 35 / 0.87 MB 变成 37 / 1.0 MB
-> （多了 `patches/lib/core.mjs` 和 `test/core.test.js`）。
+> 所以本仓库目录里不会再有它们。0.4.0 时文件数与体积从 35 / 0.87 MB 长到 37 / 1.0 MB
+> （多了 `patches/lib/core.mjs` 和 `test/core.test.js`）；0.4.8 删掉 region 门之后回到 35 / 605 KB。
 
 ---
 
