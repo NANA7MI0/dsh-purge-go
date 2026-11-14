@@ -1027,15 +1027,7 @@ README.md         本文
 
 ### 0.4.12
 
-**修引擎重构后 87/88 打不上的问题。**
-
-87（挂起提示）原来是一组 8 条链式补丁：先改 `const system` → `let system`，再改 `const renderedPrompt` → `let renderedPrompt`，再逐步插入挂载逻辑。**只要引擎重构、链子前面断一环，后面的全对不上**——88（严格挂载）依赖 87 升级步产生的 `dshPurgeNorm` / `dshPurgeHead`，也就跟着失效。
-
-现在加了第 9 条：直接匹配 `let renderedPrompt = renderPrompt(assembly);` 这一行，**一步插入完整的挂载块，不依赖前面任何一环**。
-
-顺带修掉一个误报：原来 `isDone` 判「pattern 不在文件里 = 已经打过」，pattern 从来没存在过也会算 `applied`。新条目因为替换文本包含了原 pattern，走的是「必须看到完整新块才算已打」那条分支，不会再假报。
-
-本机效果：`partial` 从 2 条降到 0，`applied` 从 53 升到 55。
+- **修 87/88 打不上的问题**：87 原来是 8 条链式补丁，引擎一重构、前面断一环后面全对不上，88 跟着失效。现在加第 9 条直接匹配 `let renderedPrompt = renderPrompt(assembly);`，一步插入完整挂载块，不依赖前面任何一环。顺带修掉一个误报——原来「pattern 从来不存在」也算已打。
 
 ### 0.4.11
 - 说清 `partial` 是什么：补丁表里每条写了多套不同引擎版本的查找串，当前引擎只匹配其中一套——命中那套就对，其余是给旧版本或桌面版的，不是「坏了一半」。
