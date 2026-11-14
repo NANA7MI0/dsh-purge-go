@@ -415,7 +415,6 @@ cd ~/dsh-purge-go && sh install.sh
 > 那是 FAT32，没有执行位，直接跑会报 `Permission denied`。
 > 用 `sh install.sh` 不需要执行权限，两种情况都能跑，所以文档统一用这个写法。
 
-
 | 参数 | 作用 |
 |---|---|
 | 不带参数 | 装插件 + 打补丁（**推荐**） |
@@ -1158,8 +1157,7 @@ def = await skills.get(summary.name, skillLookup)
 - [18. 配套红队插件](#18-配套红队插件)
 - [19. 目录](#19-目录)
 - [20. 文件结构](#20-文件结构)
-- [21. 改包名要同步五处](#21-改包名要同步五处)
-- [22. 更新日志](#22-更新日志)
+- [21. 更新日志](#21-更新日志)
 
 ---
 
@@ -1195,35 +1193,48 @@ README.md         本文
 
 ---
 
-## 21. 改包名要同步五处
+## 21. 更新日志
 
-**这一节给改仓库的人看。** 漏一处就会出现「工具能用、胶囊没了」这种半死状态。
+### 0.4.5
 
-包名出现在五个地方，必须同时改：
+**删掉一条永远用不上的补丁**
 
-| # | 位置 | 容易漏的原因 |
-|---|---|---|
-| 1 | `package.json` 的 `name` | 这个最容易想起来 |
-| 2 | `cordis.patch.yml` 的 `id` 和 `name` | **最常漏**。文件自己的注释就写着「宿主按 name 去 node_modules 解析」，对不上就整个跳过装配，表现为**工具还在、胶囊消失** |
-| 3 | 装上之后的 profile：`~/.dsh/profiles/web/package.json` 的 `dependencies` key | 已经装好了才改包名时才会漏 |
-| 4 | 同上文件的 `dsh.profile.bundles` 数组 | 同上 |
-| 5 | `~/.dsh/profiles/web/node_modules/<name>` 这个链接目录的名字 | 同上 |
+`21.BASH_TIMEOUT_RESTORE` 是迁移专用：把旧版插件改过的 `timeoutMs` 改回 60000，而且只认带
+`[dsh-purge]` 标记的值。干净安装的环境里根本没有这个标记，所以它永远显示「未命中」。
+删掉后补丁表从 87 条变 86 条，手机上未生效的从 3 条降到 2 条。
 
-**改完自查**（官方检查器，会直接告诉你 App 能不能画出胶囊）：
+### 0.4.4
 
-```sh
-node ~/.dsh/skills/dsh-go-plugin/kit/bin/check.mjs ~/.dsh/dsh-go/plugins/<name>
-```
+**修 0.4.2 引入的致命问题：装上去胶囊不显示**
 
-看到 `原生界面能显示（胶囊 1）` 就说明没问题。
+起因是发 npm 时把包名从 `dsh-purge-go` 改成 `dsh-go-purge`，但只改了一处。
+`cordis.patch.yml` 里的 `id` 和 `name` 还写着旧名，宿主按 name 去解析找不到，整个插件被跳过装配——
+表现为**工具还能用、胶囊消失**。包名现在五处一致。
 
-**原生插件的目录位置**也容易搞错：胶囊这一类原生界面元素由 `$DSH_HOME/dsh-go/plugins/<name>/` 下的包决定，**不是** profile 的 `node_modules`。profile 那侧只是让引擎能加载它的代码。两边都要有，且名字一致。
+**补丁执行器支持正则**
 
-**胶囊是热加载的**：改完 `package.json` 或 `cordis.patch.yml`，不用重启引擎，App 会自己重读。
+上游的补丁表里有 7 条 `pattern` 是 `RegExp`，导出成 JSON 时退化成 `{}` 被静默丢弃。
+执行器现在接受 `{source, flags}` 形式，走 `String.replace`，`$1` 这类分组能正常展开。
+补回 `3.SCOPE_INTRO` 后，实际生效数从 53 涨到 54。
 
----
+**胶囊会说清「哪条没打上、为什么」**
 
-## 22. 更新日志
+以前只报数字（已生效 55 · 未命中 2 · 无目标句 1），模型拿到结构化 JSON 后经常只念数字、
+原因自己猜。现在返回里带 `verdict`（一句话结论）和 `summary`（逐条原因）：
+29 条「包不存在」按用途归类（预设变体、桌面外壳、Claude/Codex 钩子、其它模型后端、
+权限升级包、PTC 执行器），并明确说明**这不影响手机端破甲能力**。
+
+### 0.4.3
+
+**修 4 条补丁的目标位置**
+
+- `4.SYSTEM_PROMPT_PERSONA`：`rel` 指向的 `.agent-presets/unrestricted/agent.cordis.yml` 手机上不存在，
+  改指 `cordis.patch.yml`（`personaPrefix` 真身在那儿）
+- `63.OFFICIAL_PLAN_MODE_NEUTRAL`：原句在 `cordis.patch.yml` 里，不在 `lib/index.js`
+- `56` / `77`：目标包实际叫 `dsh-client-ui-conversation`，别名表里没有
+
+实际生效数从 48 涨到 53。`personaPrefix` 在 base / web-app / headless / sdk-app / acp-app
+五个包里全部清空。
 
 ### 0.4.0
 
