@@ -36,11 +36,32 @@ if (cmd === "probe") {
   const rows = core.probe(root);
   console.log("root: " + root);
   console.log("tally: " + JSON.stringify(core.tally(rows)));
+  const NL = String.fromCharCode(10);
+  const NOTE = {
+    partial:
+      "  正常情况，不用担心，不影响破甲能力。" + NL +
+      "  补丁表里每条都写了几套不同引擎版本的写法，你的引擎只会有其中一套；" + NL +
+      "  命中那套就已经改好了，剩下的是别的版本和桌面版的备用分支。",
+    miss:
+      "  一条都对不上：引擎里这段代码已经改了样子，或这条只管桌面端。" + NL +
+      "  不影响手机端的破甲能力。",
+    hit: "  全部匹配，可以打（跑 apply）。",
+    applied: "  已经打过了。",
+    no_needle: "  补丁数据里 pattern 为空或不可用，数据残缺。",
+    no_pkg: "  目标包在手机引擎里不存在，改的是手机上没装的代码。",
+    no_file: "  目标文件不存在。",
+  };
   for (const st of ["hit", "partial", "applied", "miss", "no_file", "no_needle", "no_pkg"]) {
     const g = rows.filter((r) => r.status === st);
     if (!g.length) continue;
     console.log("\n# " + st + " (" + g.length + ")");
-    for (const r of g) console.log("  " + r.id + "." + r.name + (r.pkg ? "  [" + r.pkg + "]" : ""));
+    if (NOTE[st]) console.log(NOTE[st]);
+    // applied 通常是几十条，逐条列只会刷屏——只报数量。
+    if (st === "applied") continue;
+    for (const r of g) {
+      const extra = st === "partial" && r.total ? "  (" + (r.total - r.hits) + "/" + r.total + " 套写法命中)" : "";
+      console.log("  " + r.id + "." + r.name + (r.pkg ? "  [" + r.pkg + "]" : "") + extra);
+    }
   }
   fs.writeFileSync(path.join(process.cwd(), "patch-probe.json"), JSON.stringify(rows, null, 1));
 } else if (cmd === "apply") {
