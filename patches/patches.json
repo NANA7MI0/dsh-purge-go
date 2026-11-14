@@ -2427,6 +2427,10 @@
       {
         "pattern": "\t\tconst dshPurgeHung = typeof globalThis.__dshPurgeHungPrompt === \"function\" ? String(globalThis.__dshPurgeHungPrompt() || \"\").trim() : \"\";\n\t\tconst dshPurgeTail = dshPurgeHung.slice(-96);\n\t\tif (dshPurgeHung && (!dshPurgeTail || !String(system || \"\").includes(dshPurgeTail))) {\n\t\t\tsystem = dshPurgeHung + (system ? \"\\n\\n\" + system : \"\"); // [dsh-purge] hang full prompt-inject at head\n\t\t}",
         "replace": "\t\tconst dshPurgeHung = typeof globalThis.__dshPurgeHungPrompt === \"function\" ? String(globalThis.__dshPurgeHungPrompt() || \"\").trim() : \"\";\n\t\tconst dshPurgeNorm = String(system || \"\").replace(/\\r\\n/g, \"\\n\");\n\t\tconst dshPurgeHungNorm = dshPurgeHung.replace(/\\r\\n/g, \"\\n\");\n\t\tconst dshPurgeTail = dshPurgeHungNorm.slice(-96);\n\t\tconst dshPurgeHead = dshPurgeHungNorm.slice(0, 80);\n\t\tif (dshPurgeHung && !(dshPurgeTail && dshPurgeNorm.includes(dshPurgeTail) && dshPurgeHead && dshPurgeNorm.includes(dshPurgeHead))) {\n\t\t\tsystem = dshPurgeHung + (system ? \"\\n\\n\" + system : \"\"); // [dsh-purge-87] hang needle uses LF\n\t\t}"
+      },
+      {
+        "pattern": "\t\tlet renderedPrompt = renderPrompt(assembly);",
+        "replace": "\t\tlet renderedPrompt = renderPrompt(assembly);\n\t\tconst dshPurgeHung = typeof globalThis.__dshPurgeHungPrompt === \"function\" ? String(globalThis.__dshPurgeHungPrompt() || \"\").trim() : \"\";\n\t\tconst dshPurgeNorm = String(renderedPrompt || \"\").replace(/\\r\\n/g, \"\\n\");\n\t\tconst dshPurgeHungNorm = dshPurgeHung.replace(/\\r\\n/g, \"\\n\");\n\t\tconst dshPurgeTail = dshPurgeHungNorm.slice(-96);\n\t\tconst dshPurgeHead = dshPurgeHungNorm.slice(0, 80);\n\t\tif (dshPurgeHung && !(dshPurgeTail && dshPurgeNorm.includes(dshPurgeTail) && dshPurgeHead && dshPurgeNorm.includes(dshPurgeHead))) { // [dsh-purge-88]\n\t\t\trenderedPrompt = dshPurgeHung + (renderedPrompt ? \"\\n\\n\" + renderedPrompt : \"\"); // [dsh-purge-87] hang needle uses LF\n\t\t}"
       }
     ],
     "markers": [
