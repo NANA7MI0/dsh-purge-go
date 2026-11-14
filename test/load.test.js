@@ -60,7 +60,6 @@ test('apply：注册三个段、三个事件、四个工具、一条命令、原
   }
   assert.deepEqual(record.events.map((entry) => entry.event).sort(), [
     'agent/pre-step',
-    'agent/pre-step',
     'agent/status',
     'system-prompt/assemble',
   ])
@@ -86,9 +85,10 @@ test('apply：注册三个段、三个事件、四个工具、一条命令、原
   assert.deepEqual(record.strips, [], '状态条已移除')
   assert.deepEqual(record.panels, [], '面板已确认在 dsh-go 上不显示，不再注册')
 
-  // 地区门与拒答续跑都要真的挂上：pre-step 两个（mnemon 过滤 + 地区门），status 一个
+  // 拒答续跑要真的挂上：pre-step 一个，status 一个。
+  // （原来的地区门已删除——它与破甲的定位相反，且会全局生效、把攻击类任务的回答清空。）
   const preSteps = record.events.filter((entry) => entry.event === 'agent/pre-step')
-  assert.equal(preSteps.length, 2)
+  assert.equal(preSteps.length, 1)
   assert.equal(record.events.some((entry) => entry.event === 'agent/status'), true)
 })
 
