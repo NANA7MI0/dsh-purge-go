@@ -1197,44 +1197,17 @@ README.md         本文
 
 ### 0.4.5
 
-**删掉一条永远用不上的补丁**
-
-`21.BASH_TIMEOUT_RESTORE` 是迁移专用：把旧版插件改过的 `timeoutMs` 改回 60000，而且只认带
-`[dsh-purge]` 标记的值。干净安装的环境里根本没有这个标记，所以它永远显示「未命中」。
-删掉后补丁表从 87 条变 86 条，手机上未生效的从 3 条降到 2 条。
+- 删掉 `21.BASH_TIMEOUT_RESTORE`——迁移专用，干净安装用不上。补丁表 87 → 86 条。
 
 ### 0.4.4
 
-**修 0.4.2 引入的致命问题：装上去胶囊不显示**
-
-起因是发 npm 时把包名从 `dsh-purge-go` 改成 `dsh-go-purge`，但只改了一处。
-`cordis.patch.yml` 里的 `id` 和 `name` 还写着旧名，宿主按 name 去解析找不到，整个插件被跳过装配——
-表现为**工具还能用、胶囊消失**。包名现在五处一致。
-
-**补丁执行器支持正则**
-
-上游的补丁表里有 7 条 `pattern` 是 `RegExp`，导出成 JSON 时退化成 `{}` 被静默丢弃。
-执行器现在接受 `{source, flags}` 形式，走 `String.replace`，`$1` 这类分组能正常展开。
-补回 `3.SCOPE_INTRO` 后，实际生效数从 53 涨到 54。
-
-**胶囊会说清「哪条没打上、为什么」**
-
-以前只报数字（已生效 55 · 未命中 2 · 无目标句 1），模型拿到结构化 JSON 后经常只念数字、
-原因自己猜。现在返回里带 `verdict`（一句话结论）和 `summary`（逐条原因）：
-29 条「包不存在」按用途归类（预设变体、桌面外壳、Claude/Codex 钩子、其它模型后端、
-权限升级包、PTC 执行器），并明确说明**这不影响手机端破甲能力**。
+- **修致命问题**：0.4.2 改包名时漏了 `cordis.patch.yml` 的 `id`/`name`，装上去工具能用、胶囊消失。
+- 补丁执行器支持正则 `pattern`，补回 3 条丢失的补丁，实际生效 53 → 54。
+- `purge_status` 返回 `verdict` 和 `summary`，直接说明哪条没打上、为什么，以及不影响破甲。
 
 ### 0.4.3
 
-**修 4 条补丁的目标位置**
-
-- `4.SYSTEM_PROMPT_PERSONA`：`rel` 指向的 `.agent-presets/unrestricted/agent.cordis.yml` 手机上不存在，
-  改指 `cordis.patch.yml`（`personaPrefix` 真身在那儿）
-- `63.OFFICIAL_PLAN_MODE_NEUTRAL`：原句在 `cordis.patch.yml` 里，不在 `lib/index.js`
-- `56` / `77`：目标包实际叫 `dsh-client-ui-conversation`，别名表里没有
-
-实际生效数从 48 涨到 53。`personaPrefix` 在 base / web-app / headless / sdk-app / acp-app
-五个包里全部清空。
+- 修 4 条补丁的目标位置（`4` 的 `rel`、`63` 的 `file`、`56`/`77` 的包名别名），实际生效 48 → 53。
 
 ### 0.4.0
 
