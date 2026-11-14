@@ -324,7 +324,10 @@ export function apply(root, opts = {}) {
   const errors = [];
   const byFile = new Map();
   for (const r of rows) {
-    if (r.status !== "hit" && r.status !== "partial") continue;
+    // miss 也要进：它可能是「等另一条补丁先打出前提」的链式下游（88 依赖 87 产生的
+    // dshPurgeNorm/dshPurgeHead）。当时判 miss，87 打完就该能接上。
+    // 纳入是安全的——miss 的 pattern 本来就不在文件里，迭代时不会被误改。
+    if (r.status !== "hit" && r.status !== "partial" && r.status !== "miss") continue;
     if (!r.files || !r.files.length) continue;
     const p = table.find((x) => x.id === r.id);
     for (const file of r.files) {
@@ -337,12 +340,12 @@ export function apply(root, opts = {}) {
       // 判据改成逐条看：这个 pattern 还在不在。
       // 只挑「还没打」的：追加型补丁的 pattern 打完仍在文件里，
       // 不排除的话每次 apply 都会重复追加一遍。
-      // 正则形态的 e.pat 是正则源码，拿它做 includes 必然 false——
-      // 以前这里没区分，导致所有正则补丁在 apply 时被静默过滤掉，只有 probe 能看出「没打」。
-      const edits = editsOf(p).filter((e) => {
-        if (isRegexEdit(e)) return !isDone(e, text);
-        return text.includes(e.pat) && !isDone(e, text);
-      });
+      // 只登记「这个文件涉及哪条补丁」，具体执行哪些 edit 留到写文件时逐轮重算。
+      // 原因：一条补丁的多条变体常是链式的（A 把 const 改 let 并插旧块，B 再把旧块升级），
+      // B 的 pattern 只有在 A 执行完之后才存在。以前在这里一次算死候选，B 永远进不来。
+      // 不在这里过滤 pattern 在不在——链式下游（88 依赖 87 打出来的 dshPurgeNorm）
+      // 在原版文本上一条都对不上，过滤掉就永远轮不到它。执行时逐轮重判。
+      const edits = editsOf(p);
       if (!edits.length) continue;
       if (!byFile.has(file)) byFile.set(file, []);
       byFile.get(file).push({ id: r.id, name: r.name, edits });
@@ -395,24 +398,48 @@ export function apply(root, opts = {}) {
     const rel = path.relative(root, file);
     const ids = jobs.map((j) => j.id);
     if (dry) {
-      logs.push("would edit " + rel + " :: " + ids.join(","));
-      files.push({ rel, ids, ok: null, dry: true });
+      // 只报「真的能匹配上」的——miss 的补丁也进了候选表，但它们一条 pattern 都不在，
+      // 全报出来会让 --dry 看起来像要改一堆其实改不动的东西。
+      const text0 = fs.readFileSync(file, "utf8");
+      const real = jobs.filter((j) => {
+        const p = table.find((x) => x.id === j.id);
+        if (!p) return false;
+        return editsOf(p).some((e) =>
+          isRegexEdit(e) ? new RegExp(e.re.source, e.re.flags).test(text0) : text0.includes(e.pat),
+        );
+      });
+      if (!real.length) continue;
+      const realIds = real.map((j) => j.id);
+      logs.push("would edit " + rel + " :: " + realIds.join(","));
+      files.push({ rel, ids: realIds, ok: null, dry: true });
       continue;
     }
     let text = fs.readFileSync(file, "utf8");
-    for (const j of jobs) {
-      for (const e of j.edits) {
-        if (isRegexEdit(e)) {
-          // 正则形态：走 String.replace，$1 这类分组由它自己展开。
-          const re = new RegExp(e.re.source, e.re.flags);
-          const next = text.replace(re, e.rep);
-          if (next !== text) text = next;
-          continue;
+    const origText = text;
+    // 迭代式：每一轮都基于「当前文本」重新判定每条 edit 该不该跑。
+    // 链式补丁（A 产生 B 的前提）因此能在一轮之后接上，直到文本不再变化。
+    let rounds = 0;
+    for (; rounds < 5; rounds++) {
+      const before = text;
+      for (const j of jobs) {
+        const p = table.find((x) => x.id === j.id);
+        if (!p) continue;
+        for (const e of editsOf(p)) {
+          if (isRegexEdit(e)) {
+            // 正则形态：能匹配就执行（替换文本自己保证「打过之后不再匹配」）。
+            const re = new RegExp(e.re.source, e.re.flags);
+            const next = text.replace(re, e.rep);
+            if (next !== text) text = next;
+            continue;
+          }
+          if (!text.includes(e.pat) || isDone(e, text)) continue;
+          const parts = text.split(e.pat);
+          if (parts.length > 1) text = parts.join(e.rep);
         }
-        const parts = text.split(e.pat);
-        if (parts.length > 1) text = parts.join(e.rep);
       }
+      if (text === before) break;
     }
+    if (rounds > 1) logs.push("iter " + rel + " :: " + rounds + " 轮收敛");
     try {
       fs.writeFileSync(file, text);
     } catch (error) {
@@ -435,6 +462,12 @@ export function apply(root, opts = {}) {
     if (unverified) logs.push("WARN " + rel + " :: " + verifyError); // 放行但明说没校验
     const good = verifyError === null || unverified;
     if (good) {
+      // 内容没变就别报 ok——miss 状态的补丁也会登记进候选表，但它们一条 pattern 都匹配不上，
+      // 报成 ok 会让人以为改了 50 多个文件。
+      if (text === origText) {
+        logs.push("skip " + rel + " :: 内容无变化");
+        continue;
+      }
       ok++;
       logs.push("ok   " + rel + " :: " + ids.join(","));
       files.push({ rel, ids, ok: true });
