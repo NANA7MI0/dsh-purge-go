@@ -616,28 +616,6 @@
     ]
   },
   {
-    "id": 21,
-    "name": "BASH_TIMEOUT_RESTORE",
-    "layer": "代码",
-    "layer_en": "Code",
-    "desc": "恢复插件延长的 bash 等待 / restore plugin-raised bash wait",
-    "file": "base",
-    "rel": [
-      "cordis.patch.yml"
-    ],
-    "softSettle": true,
-    "replacements": [
-      {
-        "pattern": {
-          "source": "(name: ['\"]@deepseek-ai\\/dsh-bash-sandbox['\"][^\\n]*\\n(?:(?! {0,4}\\S)[^\\n]*\\n)*? {8}timeoutMs: )60{5,}[ \\t]*(?:#|\\/\\/)[ \\t]*\\[dsh-purge\\] bash timeout raised[ \\t]*(?=\\n|$)",
-          "flags": "g"
-        },
-        "replace": "$160000"
-      }
-    ],
-    "broken": true
-  },
-  {
     "id": 22,
     "name": "READ_CAPS_RAISED",
     "layer": "代码",
