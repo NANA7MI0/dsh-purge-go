@@ -179,6 +179,13 @@ cd ~/dsh-purge-go && sh install.sh
 
 `install.sh` 会连做两件事：**装插件**（注入层）+ **打补丁**（补丁层），做完提示你重启。
 
+`install.sh` 做三件事：**打补丁**（补丁层）+ **装插件**（注入层）+ **建原生界面目录**（输入框上方的胶囊、状态条、面板）。
+
+> **第三步只在手机端有意义。** dsh-go 的原生界面不在 profile 里，而是在
+> `~/.dsh/dsh-go/plugins/dsh-go-purge/`——那一层由 app 自己扫，`dsh plugin add` 不管。
+> 脚本会把里面的每一项都做成指向仓库的**软链**，所以以后 `git pull` 更新仓库，
+> 原生界面跟着变，不用再单独同步 `package.json` 里的清单。
+
 **git 拉不下来时**改用 tar 包（本机实测 `git clone` 会报 `could not read Username`）：
 
 ```sh
@@ -197,7 +204,7 @@ cd ~/dsh-purge-go && sh install.sh
 
 | 参数 | 作用 |
 |---|---|
-| 不带参数 | 装插件 + 打补丁（**推荐**） |
+| 不带参数 | 打补丁 + 装插件 + 建原生界面目录（**推荐**） |
 | `sh install.sh --plugin-only` | 只装插件，不打补丁。注入层生效，引擎的审批和沙箱限制仍在 |
 | `sh install.sh --dry` | 只扫描 + 预演补丁会改哪些文件，**不装插件、不改任何文件** |
 | `sh install.sh --profile web` | 指定 profile，默认 `web` |
@@ -231,7 +238,7 @@ cd ~/dsh-purge-go && node patches/purge-patch.mjs probe
 
 两条都符合，直接重启引擎即可。
 
-### 2.3 不想用脚本：手动两步
+### 2.3 不想用脚本：手动三步
 
 ```sh
 # 第一步：装插件（注入层）
@@ -241,7 +248,17 @@ dsh plugin --profile web add ~/dsh-purge-go
 cd ~/dsh-purge-go
 node patches/purge-patch.mjs probe   # 先看哪些能打
 node patches/purge-patch.mjs apply   # 真打
+
+# 第三步：建原生界面目录（只有手机端要，胶囊/状态条/面板靠它）
+N=~/.dsh/dsh-go/plugins/dsh-go-purge
+rm -rf "$N" && mkdir -p "$N"
+for f in LICENSE NOTICE README.md assets cordis.patch.yml install.sh lib patches package.json; do
+  [ -e ~/dsh-purge-go/$f ] && ln -sf ~/dsh-purge-go/$f "$N/$f"
+done
 ```
+
+**漏了第三步会怎样**：插件照常工作、`purge_*` 工具都在，但输入框上方**没有胶囊、没有状态条、点不开面板**——
+因为那三样不在 profile 里，是 app 自己去 `~/.dsh/dsh-go/plugins/` 扫出来画的。
 
 **破甲靠两层，装完只有一层：**
 
@@ -259,6 +276,29 @@ node patches/purge-patch.mjs apply   # 真打
 插件首次加载时会自动把包内默认正文（约 26 KB，会拼上题材分类扩展）落盘到
 `~/.dsh/prompt-inject.md`，并默认开启。想换成自己写的，装好之后用 `purge_prompt` 的 `set`
 或直接编辑那个文件都行。
+
+### 2.4.1 从 0.4 或更早升级到 0.5
+
+**重跑一次 `sh install.sh` 就行，不要只 `git pull`。**
+
+原因：0.5 起原生界面的清单（胶囊、状态条、面板）改成了「指向仓库的软链」。老安装里的
+`~/.dsh/dsh-go/plugins/dsh-go-purge/package.json` 是**独立文件**——只 pull 仓库，它不会变，
+app 读到的还是老清单，于是胶囊点开没有面板、或者面板报「插件还没处理这一项」。
+`install.sh` 会把那个目录整个重建，清单也变成软链，之后 pull 就自动同步了。
+
+```sh
+cd ~/dsh-purge-go && git pull && sh install.sh
+am force-stop io.github.ccch1mneyyy.dsh_app
+```
+
+**不用担心的几件事**（跨版本都兼容）：
+
+- `~/.dsh/prompt-inject.md`（你自己的正文）不会被覆盖，插件只在文件缺失时落盘默认正文
+- `~/.dsh/dsh-purge/state.json` 的 `version` 一直是 1，变体、按模型指定、开关都保留
+- `~/.dsh/dsh-purge/patch-backup/` 里旧的补丁备份照常能用
+- profile 里的 `link:` 会被 `dsh plugin add` 改成新路径，不用手动改
+
+**唯一会丢的是你手动改过的 `~/.dsh/dsh-go/plugins/dsh-go-purge/package.json`**——那个文件本来就该从仓库同步，重建时被覆盖是预期行为。
 
 ### 2.5 怎么重启引擎
 
@@ -729,7 +769,10 @@ rm -rf ~/dsh-purge-go
 rm -rf ~/.dsh/prompt-inject.md ~/.dsh/dsh-purge
 rm -rf ~/.dsh/profiles/web/node_modules/dsh-go-purge
 
-# ④ 重启引擎
+# ④ 删原生界面目录（0.3 起就有，卸载最容易漏的一项）
+rm -rf ~/.dsh/dsh-go/plugins/dsh-go-purge
+
+# ⑤ 重启引擎
 am force-stop io.github.ccch1mneyyy.dsh_app
 ```
 
@@ -743,6 +786,7 @@ am force-stop io.github.ccch1mneyyy.dsh_app
 | **注入层** | `~/.dsh/prompt-inject.md` | 删文件 | 每次开对话都往系统提示里塞破甲正文 |
 | **插件注册** | `~/.dsh/profiles/web/package.json` | `dsh plugin remove` | 重启后插件又加载回来 |
 | **插件文件** | `~/dsh-purge-go`、`node_modules` 软链 | `rm -rf` | 占空间；重装时可能撞路径 |
+| **原生界面目录** | `~/.dsh/dsh-go/plugins/dsh-go-purge/`（胶囊 / 状态条 / 面板在这里声明） | `rm -rf` | app 还认为这个插件有原生界面；里面的软链变成断链，插件详情页可能报「原生界面 · N 项有误」 |
 
 ### 14.3 怎么确认真的卸干净
 
@@ -759,6 +803,9 @@ ls ~/.dsh/ | grep -i 'purge\|prompt-inject'   # 应该为空
 
 # 插件注册（应该输出 undefined）
 node -p 'require(process.env.HOME+"/.dsh/profiles/web/package.json").dependencies["dsh-go-purge"]'
+
+# 原生界面目录（应该不存在）
+ls ~/.dsh/dsh-go/plugins/ 2>/dev/null    # 没有 dsh-go-purge 就算干净
 ```
 
 **别用 `probe` 的 `applied` / `partial` 数字判断是否卸干净。** 这两个状态在**原版系统上本来就会出现**——补丁表里很多 pattern 是不同版本的备选分支，原版只命中其中一部分。判断标准只有两条：**`grep` 搜不到 `dsh-purge`**，**关键文案是原版**。
@@ -1038,6 +1085,12 @@ README.md         本文
 
 ## 21. 更新日志
 
+
+### 0.5.1
+
+- 修「还原补丁」在首次安装上失效：`install.sh` 打的补丁备份原来落在仓库目录，插件的还原只认 `~/.dsh/dsh-purge/patch-backup/`；现在两边打通，老安装的备份也能找到。
+- 面板按钮改为 `重读 / 一键注入 / 开关注入 / 还原补丁`。一键注入同时打开提示词注入并把补丁打上；两层都停时顶部只说一句「破甲未正常工作」，不再分开报。
+- `install.sh` 补上第三步：建 `~/.dsh/dsh-go/plugins/dsh-go-purge/`。漏了这步装完没有胶囊和面板——那层由 app 自己扫，`dsh plugin add` 不管。
 
 ### 0.5.0
 

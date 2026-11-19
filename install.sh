@@ -74,8 +74,15 @@ else
     exit 0
   fi
 
-  if node patches/purge-patch.mjs apply 2>&1 | sed 's/^/  /'; then
+  # 备份统一放到插件自己的目录：~/.dsh/dsh-purge/patch-backup/<时间戳>
+  # 不传 --backup 的话 CLI 会建在仓库目录（backup-<时间戳>），插件的「还原补丁」
+  # 就找不到——第一次安装的人点了只会看到「没有可还原的补丁备份」。
+  BACKUP_DIR="$HOME/.dsh/dsh-purge/patch-backup/$(date +%Y%m%d%H%M%S)"
+  mkdir -p "$BACKUP_DIR"
+  if node patches/purge-patch.mjs apply --backup "$BACKUP_DIR" 2>&1 | sed 's/^/  /'; then
     say "  ✔ 补丁已打上"
+    say "    备份：$BACKUP_DIR"
+    say "    （面板上的「还原补丁」用的就是这里）"
   else
     die "打补丁失败。引擎包可能已被部分修改——跑 sh install.sh --dry 看状态，或查 patch-probe.json。"
   fi
@@ -108,10 +115,34 @@ else
   say ""
 fi
 
+# ── 第 3 步：原生界面目录（只有 dsh-go 手机端需要）─────────────────
+# dsh-go 的原生插件（输入框上方的胶囊、状态条、面板）不在 profile 里，
+# 而是在 $HOME/.dsh/dsh-go/plugins/<包名>/ —— 那一层 app 自己扫，dsh plugin add 不管。
+# 不建这个目录，装完没有胶囊、没有面板，README 里让你「点胶囊」就成了空话。
+if [ -f /etc/dsh-app/runtime.json ]; then
+  NATIVE="$HOME/.dsh/dsh-go/plugins/dsh-go-purge"
+  say "▸ 第 3 步：建原生界面目录"
+  say "  $NATIVE"
+  say ""
+  rm -rf "$NATIVE"
+  mkdir -p "$NATIVE"
+  for f in LICENSE NOTICE README.md assets cordis.patch.yml install.sh lib patches package.json; do
+    [ -e "$HERE/$f" ] && ln -sf "$HERE/$f" "$NATIVE/$f"
+  done
+  say "  ✔ 已链到 $HERE"
+  say ""
+  say "  这里每一项都是软链，所以以后 git pull 更新仓库，原生界面跟着变，"
+  say "  不用再单独同步 package.json 里的 dshGo 清单。"
+  say ""
+else
+  say "（这台机器没有 dsh-go 桥接，跳过原生界面目录）"
+  say ""
+fi
+
 # ── 收尾 ────────────────────────────────────────────────────────
 say ""
 say "════════════════════════════════════════"
-say " 两层都装好了"
+say " 装好了"
 say "════════════════════════════════════════"
 say ""
 say "  注入层  ✔ 插件加载时自动落盘正文并开启"
