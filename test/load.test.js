@@ -14,6 +14,14 @@ function fakeHost() {
   const systemPrompt = { section: (section) => record.sections.push(section) }
   const base = {
     systemPrompt,
+    // 插件用 ctx.get('dshGo', false) 拿服务（不声明 inject 也能拿），所以挂在这里
+    get: (name) => (name === 'dshGo' ? base.dshGo : undefined),
+    dshGo: {
+      strip: (id, producer) => record.strips.push({ id, producer }),
+      panel: (id, options) => record.panels.push({ id, options }),
+      on: (id, handler) => record.actions.push({ id, handler }),
+      refresh: () => {},
+    },
     // tools 现在由顶层 inject 保证就绪，apply 里直接 ctx.tools.register()
     tools: { register: (definition) => record.tools.push(definition) },
     on: (event, handler, options) => record.events.push({ event, handler, options }),
@@ -47,7 +55,7 @@ test('导出形状：name / inject / apply', () => {
   assert.equal(typeof apply, 'function')
 })
 
-test('apply：注册三个段、三个事件、四个工具、一条命令、原生界面', () => {
+test('apply：注册三个段、三个事件、六个工具、一条命令、原生界面', () => {
   const home = tempHome()
   const { ctx, record } = fakeHost()
   apply(ctx, { home })
@@ -72,18 +80,21 @@ test('apply：注册三个段、三个事件、四个工具、一条命令、原
   }
   assert.equal(record.commands[0].name, 'purge')
 
-  // 面板与状态条都改用清单静态字段：bridge.panel() 和 bridge.strip() 在当前 App 版本
-  // 都是空实现——调用不报错，但 App 侧永远报「插件还没处理这一项」。
-  // 实验段会用 {view} 对象尝试注册一次 purge 面板（路径 D），所以这里允许出现一次。
-  assert.ok(record.panels.length <= 1, '实验最多注册一个面板')
-  // 注意：native.js 里有一段「桥接实验」，会分别用两条路径注册一次 state，
-  // 所以这里能看到 state。它只是实验，不影响清单里 composer.strip 用静态 text。
-  assert.ok(record.strips.length <= 2, '实验最多注册两个状态条（路径 A 与 C）')
-  // 0.4.x：加号工具（composer.tools）已删，只留一个胶囊，点了报两层状态。
-  // 胶囊是静态 effect:insert，App 直接执行，不需要 on() handler，所以这里是空数组。
+  // 面板：view 只返回静态骨架（值全是 { $: 'data.x' } 绑定），
+  // 取数在 data() 里、30 秒推一次。旧版把扫盘塞进 view，App 每次重绘都跑一遍，
+  // 在手机上把整机拖死过一次。
+  //
+  // 状态条只做「异常告警」：补丁被 App 更新冲掉、或注入层被关掉时才现身
+  // （正常时推空字符串，App 那边 text 为空就不画）。入口胶囊另走 composer.actions。
+  assert.equal(record.strips.length, 1, '状态条注册一个（异常告警用）')
+  assert.equal(record.strips[0].id, 'purge-alert')
+  assert.equal(record.panels.length, 1, '面板注册一个')
+  assert.equal(record.panels[0].id, 'status')
+  assert.ok(record.panels[0].options.view, '面板要有 view')
+  assert.equal(typeof record.panels[0].options.data, 'function', '面板要有 data')
+  assert.equal(typeof record.panels[0].options.actions.refresh, 'function')
+  // 胶囊是静态 effect:insert，App 直接执行，不需要 on() handler。
   assert.deepEqual(record.actions, [], '不再注册任何 on() handler')
-  assert.deepEqual(record.strips, [], '状态条已移除')
-  assert.deepEqual(record.panels, [], '面板已确认在 dsh-go 上不显示，不再注册')
 
   // 拒答续跑要真的挂上：pre-step 一个，status 一个。
   // （原来的地区门已删除——它与破甲的定位相反，且会全局生效、把攻击类任务的回答清空。）

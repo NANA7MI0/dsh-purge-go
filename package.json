@@ -1,6 +1,6 @@
 {
   "name": "dsh-go-purge",
-  "version": "0.4.20",
+  "version": "0.5.0",
   "description": "把 dsh-purge 移植适配到 dsh-go（Android + proot）：只保留核心破甲能力——提示词注入层 + 86 条引擎源码补丁（探测/应用/回滚）。桌面版的 Electron 适配、asar 解包、Windows 计划任务等全部抛弃——手机上没有 Electron、没有 asar 归档、也没有 schtasks，这些代码在 Android 上没有落点。为达到原版破甲效果，审批与沙箱一并放开。",
   "type": "module",
   "main": "lib/index.js",
@@ -21,7 +21,7 @@
     "test": "node --test test/*.test.js"
   },
   "engines": {
-    "dsh": ">=0.2.1-rc.2 <0.3.0"
+    "dsh": ">=0.2.1-rc.2 <0.3.0-0"
   },
   "author": "NANA7MI0",
   "repository": {
@@ -59,9 +59,31 @@
           },
           "icon": "wrench",
           "effect": {
-            "type": "insert",
-            "text": "把破甲两层状态报给我：提示词注入层（开关/正文体积/变体）+ 补丁层（生效数与分布、没生效的为什么）（调 purge_status）"
+            "type": "open",
+            "page": "panel:status"
           }
+        }
+      ],
+      "panels": [
+        {
+          "id": "status",
+          "title": {
+            "zh": "破甲状态",
+            "en": "Purge status"
+          },
+          "icon": "wrench",
+          "placement": [
+            "session.tab",
+            "chat.panel",
+            "features"
+          ]
+        }
+      ],
+      "composer.strip": [
+        {
+          "id": "purge-alert",
+          "icon": "warning",
+          "panel": "status"
         }
       ]
     }
