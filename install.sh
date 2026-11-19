@@ -152,7 +152,7 @@ if [ -f /etc/dsh-app/runtime.json ]; then
   rm -rf "$NATIVE"
   mkdir -p "$NATIVE"
   LINKED=0
-  for f in LICENSE NOTICE README.md assets cordis.patch.yml install.sh lib patches package.json; do
+  for f in LICENSE NOTICE README.md assets cordis.patch.yml docs install.sh lib patches package.json; do
     if [ -e "$HERE/$f" ]; then
       if ln -sf "$HERE/$f" "$NATIVE/$f" 2>/dev/null; then
         LINKED=$((LINKED+1))
@@ -161,8 +161,8 @@ if [ -f /etc/dsh-app/runtime.json ]; then
       fi
     fi
   done
-  if [ "$LINKED" -lt 9 ]; then
-    say "  ⚠ 只链上了 $LINKED/9 项，原生界面可能缺文件"
+  if [ "$LINKED" -lt 10 ]; then
+    say "  ⚠ 只链上了 $LINKED/10 项，原生界面可能缺文件"
   fi
   say "  ✔ 已链到 $HERE"
   say ""
