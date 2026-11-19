@@ -67,7 +67,7 @@ else
     say "▸ 预演模式：只扫描 + 预演补丁"
     say "  不装插件、不改任何文件。"
   else
-    say "▸ 第 1 步 / 2：打补丁到引擎包"
+    say "▸ 第 1 步 / 3：打补丁到引擎包"
   fi
   say ""
 
@@ -114,40 +114,17 @@ else
   say ""
 fi
 
-# ── 第 2 步：装插件（放最后，它会触发宿主重新装配插件层）──────────
-if [ "$DRY" = "1" ]; then
-  say "  （预演模式不装插件）"
-  say ""
-  exit 0
-fi
-
-say "▸ 第 2 步 / 2：装插件到 profile「$PROFILE」"
-say "  $HERE"
-say ""
-# 旧版引擎上这一步会把正在执行的那条命令掐掉（Error: tool call aborted）。
-# 现在实测不再发生；但顺序仍保持「先补丁后插件」，万一某台机器还会打断，
-# 补丁早已落地，被打断的只是收尾输出。
-say "  这一步会让宿主重新装配插件层。"
-say ""
-
-if dsh plugin --profile "$PROFILE" add "$HERE" 2>&1 | sed 's/^/  /'; then
-  say "  ✔ 插件已装入"
-else
-  # 返回非零不一定是真失败（旧版上装配会掐断命令）；别让用户盲目重装，先核对。
-  say ""
-  say "  ⚠ dsh plugin add 返回非零——先别重装，核对一下是不是已经装上了："
-  say "      node -p 'require(process.env.HOME+\"/.dsh/profiles/web/package.json\").dependencies[\"dsh-purge-go\"]'"
-  say "    有输出就说明装上了。"
-  say ""
-fi
-
-# ── 第 3 步：原生界面目录（只有 dsh-go 手机端需要）─────────────────
+# ── 第 2 步：原生界面目录（只有 dsh-go 手机端需要）─────────────────
 # dsh-go 的原生插件（输入框上方的胶囊、状态条、面板）不在 profile 里，
 # 而是在 $HOME/.dsh/dsh-go/plugins/<包名>/ —— 那一层 app 自己扫，dsh plugin add 不管。
 # 不建这个目录，装完没有胶囊、没有面板，README 里让你「点胶囊」就成了空话。
+#
+# 为什么排在装插件之前：建目录是纯文件操作、不会被打断；装插件是整条流程里唯一
+# 可能掐断命令的步骤。顺序反过来会出现「插件装上了、目录没建」——用户拿到一个
+# 既没有胶囊也没有面板的插件，连点哪儿修都找不到。
 if [ -f /etc/dsh-app/runtime.json ]; then
   NATIVE="$HOME/.dsh/dsh-go/plugins/dsh-go-purge"
-  say "▸ 第 3 步：建原生界面目录"
+  say "▸ 第 2 步 / 3：建原生界面目录"
   say "  $NATIVE"
   say ""
   rm -rf "$NATIVE"
@@ -175,6 +152,27 @@ else
   say ""
 fi
 
+# ── 第 3 步：装插件（放最后，它会触发宿主重新装配插件层）──────────
+say "▸ 第 3 步 / 3：装插件到 profile「$PROFILE」"
+say "  $HERE"
+say ""
+# 旧版引擎上这一步会把正在执行的那条命令掐掉（Error: tool call aborted）。
+# 现在实测不再发生；但顺序仍保持「先补丁后插件」，万一某台机器还会打断，
+# 补丁早已落地，被打断的只是收尾输出。
+say "  这一步会让宿主重新装配插件层。"
+say ""
+
+if dsh plugin --profile "$PROFILE" add "$HERE" 2>&1 | sed 's/^/  /'; then
+  say "  ✔ 插件已装入"
+else
+  # 返回非零不一定是真失败（旧版上装配会掐断命令）；别让用户盲目重装，先核对。
+  say ""
+  say "  ⚠ dsh plugin add 返回非零——先别重装，核对一下是不是已经装上了："
+  say "      node -p 'require(process.env.HOME+\"/.dsh/profiles/web/package.json\").dependencies[\"dsh-purge-go\"]'"
+  say "    有输出就说明装上了。"
+  say ""
+fi
+
 # ── 收尾 ────────────────────────────────────────────────────────
 say ""
 say "════════════════════════════════════════"
@@ -182,7 +180,13 @@ say " 装好了"
 say "════════════════════════════════════════"
 say ""
 say "  注入层  ✔ 插件加载时自动落盘正文并开启"
-say "  补丁层  ✔ 已打到引擎包"
+# --plugin-only 时补丁那步是跳过的，别在收尾说「已打到引擎包」
+if [ "$MODE" = "plugin" ]; then
+  say "  补丁层  ✖ 没打（本次用了 --plugin-only）"
+  say "           审批和沙箱限制还在，想补上就跑：cd $HERE && sh install.sh"
+else
+  say "  补丁层  ✔ 已打到引擎包"
+fi
 say ""
 say "▸ 最后一步：重启引擎让补丁生效"
 say ""
