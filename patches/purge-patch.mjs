@@ -63,7 +63,11 @@ if (cmd === "probe") {
       console.log("  " + r.id + "." + r.name + (r.pkg ? "  [" + r.pkg + "]" : "") + extra);
     }
   }
-  fs.writeFileSync(path.join(process.cwd(), "patch-probe.json"), JSON.stringify(rows, null, 1));
+  // 写哪儿由 --out 决定；没写就写 cwd（老行为）。install.sh --dry 会传临时目录，
+  // 否则号称「什么都没改」却往仓库里丢一个 patch-probe.json。
+  const out = flag("out") || path.join(process.cwd(), "patch-probe.json");
+  fs.mkdirSync(path.dirname(out), { recursive: true });
+  fs.writeFileSync(out, JSON.stringify(rows, null, 1));
 } else if (cmd === "apply") {
   let report;
   try {

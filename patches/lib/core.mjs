@@ -12,6 +12,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { createRequire } from "node:module";
 import { createHash } from "node:crypto";
@@ -138,11 +139,29 @@ export function editsOf(p) {
 export function marked(p, text) {
   const ms = [];
   if (Array.isArray(p.markers)) ms.push(...p.markers);
+  // markersAny 在数据里全是布尔 true，不是数组；markers 本身已经用 some() 取「任一命中」，
+  // 所以这个开关从来没有存在意义。留着这行是为了兼容将来真写成数组的情况。
   if (Array.isArray(p.markersAny)) ms.push(...p.markersAny);
   if (typeof p.marker === "string") ms.push(p.marker);
+  // forbid 在数据里全是数组（6 条），原来只认字符串，等于这 6 条保护从未生效。
   if (typeof p.forbid === "string") ms.push(p.forbid);
+  else if (Array.isArray(p.forbid)) for (const f of p.forbid) if (typeof f === "string") ms.push(f);
   return ms.some((m) => typeof m === "string" && m.length > 3 && text.includes(m));
 }
+
+/**
+ * 数据里那几个执行器不读的字段，语义与现状（别再照着字段改行为，会白改）：
+ *
+ *  - markersAny  布尔 true。markers 本身已是「任一命中」，这个开关多余。
+ *  - skipIfMarked 34 条。本意「文件已有 marker 就跳过这条」，但一个文件常有多条补丁，
+ *                 按文件跳过会连别的补丁一起漏掉，所以执行器故意不实现。
+ *  - optional    47 条。本意「打不上不算失败」。现在 no_pkg（包不存在）本来就不判失败，
+ *                 效果已达成，字段冗余。
+ *  - strictFiles  3 条 / softSettle 2 条。早期设想的「严格/宽松判定」，从未实现。
+ *  - surfaces     7 条（全是 ["desktop"]）。桌面专属标记。目前靠 no_pkg 兜住，
+ *                 但如果某台机器装了这个包，这几条会被当成手机端补丁去打。
+ *  - broken       3 条（#3/#73/#77）。已知打不上，见下面 apply 里的跳过。
+ */
 
 /**
  * 逐补丁扫盘判定。
@@ -330,6 +349,12 @@ export function apply(root, opts = {}) {
     if (r.status !== "hit" && r.status !== "partial" && r.status !== "miss") continue;
     if (!r.files || !r.files.length) continue;
     const p = table.find((x) => x.id === r.id);
+    // broken 标的是「已知打不上」的补丁（#3/#73/#77）。以前这个字段没人读，
+    // 每次 apply 都白扫一遍、还可能改出半截。现在直接跳过并留一行日志。
+    if (p?.broken === true) {
+      logs.push("skip " + r.id + " " + (r.name || "") + " :: 标注为 broken，不尝试");
+      continue;
+    }
     for (const file of r.files) {
       if (!fs.existsSync(file)) continue;
       const text = fs.readFileSync(file, "utf8");
@@ -353,7 +378,12 @@ export function apply(root, opts = {}) {
   }
   if (!byFile.size) {
     logs.push("nothing to apply");
-    return { backupDir: null, applied: 0, failed: 0, files: [], logs, errors };
+    // 字段要和正常路径一致：少了 rolledBack/rollbackFailed/rollbackMissed，
+    // 任何用 if (!report.rolledBack) 判失败的新调用方都会被误导。
+    return {
+      backupDir: null, applied: 0, failed: 0, files: [], logs, errors,
+      rolledBack: false, rollbackFailed: false, rollbackMissed: [],
+    };
   }
   const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
   const dir = backupDir || path.join(cwd, "backup-" + stamp);
@@ -441,7 +471,12 @@ export function apply(root, opts = {}) {
     }
     if (rounds > 1) logs.push("iter " + rel + " :: " + rounds + " 轮收敛");
     try {
-      fs.writeFileSync(file, text);
+      // 原子写：先写同目录临时文件、再 rename 覆盖。原来是直接 writeFileSync，
+      // 写到一半被中断（OOM / 断电 / Ctrl-C / 宿主热装配）会留下截断的引擎文件，
+      // 而且这种半截状态不走后面的校验和回滚。
+      const tmp = file + ".purge-tmp-" + process.pid;
+      fs.writeFileSync(tmp, text);
+      fs.renameSync(tmp, file);
     } catch (error) {
       // 写失败：当前文件可能半写，立刻回滚它 + 之前写过的全部
       restoreOne(file, rel);
@@ -486,6 +521,17 @@ export function apply(root, opts = {}) {
       errors.push({ rel, ids, error: verifyError, rolledBack: true });
       ok = 0; // 全部回滚后，成功数归零——不能报「改了 3 个成功 1 个失败」
       break;
+    }
+  }
+  if (rolledBack) {
+    // 回滚了就把 files 里那些「已经改成功」的条目降级成 rolledBack，
+    // 否则调用方按 files 渲染明细会看到「改了 3 个成功」，而实际全撤了。
+    for (const f of files) {
+      if (f.ok === true) {
+        f.ok = false;
+        f.rolledBack = true;
+        f.error = f.error || "已随事务回滚";
+      }
     }
   }
   if (rolledBack && rollbackFailed) {
@@ -548,9 +594,20 @@ export function restore(backupDir, opts = {}) {
       return;
     }
     try {
-      fs.copyFileSync(from, path.join(root, rel));
-      // 还原后核对哈希（manifest 里有才算）
+      // 先校验备份文件本身，再写进引擎包。原来的顺序是先 copy 再核对目标，
+      // 备份一旦损坏，坏内容已经落到引擎里了，只留一行错误、不会退回去。
       const expect = manifest?.files?.find((f) => f.rel === rel)?.sha256;
+      if (expect) {
+        const srcHash = sha256(from);
+        if (srcHash && srcHash !== expect) {
+          const msg = "备份文件与 manifest 不符，未写入";
+          logs.push("FAIL " + rel + ": " + msg);
+          files.push({ rel, ok: false, error: msg });
+          errors.push({ rel, error: msg });
+          return;
+        }
+      }
+      fs.copyFileSync(from, path.join(root, rel));
       if (expect) {
         const actual = sha256(path.join(root, rel));
         if (actual && actual !== expect) {
@@ -613,6 +670,8 @@ function countFiles(dir) {
 
 /** patches.json 与本模块的相对位置：<pkg>/patches/lib/core.mjs → <pkg>/patches/patches.json */
 function resolvePatchesFile() {
-  const here = path.dirname(new URL(import.meta.url).pathname);
+  // 必须用 fileURLToPath 而不是 .pathname：后者不解码百分号，
+  // 仓库路径里有空格或中文时（/tmp/sp ace、~/我的项目）会变成 %20 直接 ENOENT。
+  const here = path.dirname(fileURLToPath(import.meta.url));
   return path.join(here, "..", "patches.json");
 }

@@ -14,11 +14,18 @@ HERE=$(cd "$(dirname "$0")" && pwd)
 PROFILE=web
 MODE=full
 
+DRY=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --plugin-only) MODE=plugin; shift ;;
-    --dry)         MODE=dry; shift ;;
-    --profile)     PROFILE=$2; shift 2 ;;
+    # --dry 单独一个开关，不跟 MODE 抢变量：原来两者共用 MODE，后出现的会覆盖前面的，
+    # 于是 `--dry --plugin-only` 反而会真的装插件。
+    --dry)         DRY=1; shift ;;
+    --profile)
+      if [ -z "$2" ]; then
+        printf '✖ --profile 后面要跟 profile 名（例如 web）\n' >&2; exit 1
+      fi
+      PROFILE=$2; shift 2 ;;
     --profile=*)   PROFILE=${1#--profile=}; shift ;;
     -h|--help)
       sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
@@ -28,6 +35,13 @@ while [ $# -gt 0 ]; do
 done
 
 say() { printf '%s\n' "$*"; }
+
+# --dry 是「只看不改」，--plugin-only 是「只装插件不打补丁」，两个一起给没有意义，
+# 而且会让调用者以为拿到的是预演结果。直接拒绝，别让顺序决定行为。
+if [ "$DRY" = "1" ] && [ "$MODE" = "plugin" ]; then
+  printf '✖ --dry 和 --plugin-only 不能一起用：前者只看不改，后者会真的装插件\n' >&2
+  exit 1
+fi
 die() { printf '✖ %s\n' "$*" >&2; exit 1; }
 
 say ""
@@ -49,7 +63,7 @@ if [ "$MODE" = "plugin" ]; then
   say "    想补上补丁，随时跑：cd $HERE && sh install.sh"
   say ""
 else
-  if [ "$MODE" = "dry" ]; then
+  if [ "$DRY" = "1" ]; then
     say "▸ 预演模式：只扫描 + 预演补丁"
     say "  不装插件、不改任何文件。"
   else
@@ -58,14 +72,20 @@ else
   say ""
 
   say "  扫描中 …"
-  if ! PROBE_OUT=$(node patches/purge-patch.mjs probe 2>&1); then
+  # --dry 时 probe 结果写到临时目录，别往仓库里留文件（见下面的「什么都没改」）
+  if [ "$DRY" = "1" ]; then
+    PROBE_OUT_PATH="$(mktemp -d)/patch-probe.json"
+  else
+    PROBE_OUT_PATH="$HERE/patch-probe.json"
+  fi
+  if ! PROBE_OUT=$(node patches/purge-patch.mjs probe --out "$PROBE_OUT_PATH" 2>&1); then
     say "$PROBE_OUT" | sed 's/^/  /'
     die "probe 失败。"
   fi
   say "$PROBE_OUT" | grep -E '^tally:' | sed 's/^/  /' || true
   say ""
 
-  if [ "$MODE" = "dry" ]; then
+  if [ "$DRY" = "1" ]; then
     node patches/purge-patch.mjs apply --dry 2>&1 | sed 's/^/  /'
     say ""
     say "  ✔ 预演完成，什么都没改。"
@@ -77,9 +97,14 @@ else
   # 备份统一放到插件自己的目录：~/.dsh/dsh-purge/patch-backup/<时间戳>
   # 不传 --backup 的话 CLI 会建在仓库目录（backup-<时间戳>），插件的「还原补丁」
   # 就找不到——第一次安装的人点了只会看到「没有可还原的补丁备份」。
-  BACKUP_DIR="$HOME/.dsh/dsh-purge/patch-backup/$(date +%Y%m%d%H%M%S)"
+  # 加毫秒随机后缀，避免同一秒内重跑覆盖上一份真备份
+  BACKUP_DIR="$HOME/.dsh/dsh-purge/patch-backup/$(date +%Y%m%d%H%M%S)-$$"
   mkdir -p "$BACKUP_DIR"
-  if node patches/purge-patch.mjs apply --backup "$BACKUP_DIR" 2>&1 | sed 's/^/  /'; then
+  # 不能写成 `if node ... | sed`：if 看的是管道最后一个命令（sed）的退出码，
+  # sed 恒返回 0，于是补丁全失败也照样打印「✔ 补丁已打上」并以 0 退出。
+  # 先把输出收进变量、按 node 自己的退出码判断，再决定要不要打印。
+  if APPLY_OUT=$(node patches/purge-patch.mjs apply --backup "$BACKUP_DIR" 2>&1); then
+    printf '%s\n' "$APPLY_OUT" | sed 's/^/  /'
     say "  ✔ 补丁已打上"
     say "    备份：$BACKUP_DIR"
     say "    （面板上的「还原补丁」用的就是这里）"
@@ -90,7 +115,7 @@ else
 fi
 
 # ── 第 2 步：装插件（放最后，它会热装配并可能打断当前工具调用）──────
-if [ "$MODE" = "dry" ]; then
+if [ "$DRY" = "1" ]; then
   say "  （预演模式不装插件）"
   say ""
   exit 0
@@ -126,9 +151,19 @@ if [ -f /etc/dsh-app/runtime.json ]; then
   say ""
   rm -rf "$NATIVE"
   mkdir -p "$NATIVE"
+  LINKED=0
   for f in LICENSE NOTICE README.md assets cordis.patch.yml install.sh lib patches package.json; do
-    [ -e "$HERE/$f" ] && ln -sf "$HERE/$f" "$NATIVE/$f"
+    if [ -e "$HERE/$f" ]; then
+      if ln -sf "$HERE/$f" "$NATIVE/$f" 2>/dev/null; then
+        LINKED=$((LINKED+1))
+      else
+        say "  ⚠ 链接失败：$f"
+      fi
+    fi
   done
+  if [ "$LINKED" -lt 9 ]; then
+    say "  ⚠ 只链上了 $LINKED/9 项，原生界面可能缺文件"
+  fi
   say "  ✔ 已链到 $HERE"
   say ""
   say "  这里每一项都是软链，所以以后 git pull 更新仓库，原生界面跟着变，"
@@ -159,6 +194,7 @@ say "  以后每次更新 App 都会重装引擎包、把补丁冲掉。"
 say "  到时候重跑一次本脚本，或者跟插件说一句「重打补丁」。"
 say ""
 say "▸ 想撤销"
-say "  cd $HERE"
-say "  node patches/purge-patch.mjs restore --backup ./backup-<时间戳>"
+say "  本次的补丁备份在：${BACKUP_DIR:-（本次没打补丁）}"
+say "  命令行撤销：node patches/purge-patch.mjs restore --backup \"$BACKUP_DIR\""
+say "  或者直接点面板上的「还原补丁」。"
 say ""

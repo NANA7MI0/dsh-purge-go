@@ -99,7 +99,7 @@ test('renderScoped / renderIntent：编号与箭头都对', () => {
   assert.equal(intent.split('\n').length, 4)
 })
 
-test('applyCategories：有标记就整块替换，清空后标记对也收掉', () => {
+test('applyCategories：有标记就整块替换，清空后条目清空但标记对保留', () => {
   const entries = loadCategories(tempHome()).entries
   const base = `规则\n${SCOPED_BEGIN}\n${SCOPED_END}\n${INTENT_BEGIN}\n${INTENT_END}\n尾`
   const filled = applyCategories(base, entries)
@@ -108,7 +108,9 @@ test('applyCategories：有标记就整块替换，清空后标记对也收掉',
   // 幂等：再算一次不增长
   assert.equal(applyCategories(filled, entries), filled)
   const cleared = applyCategories(filled, [])
-  assert.ok(!cleared.includes(SCOPED_BEGIN))
+  // 标记对必须留着：删掉之后 hasMarkers() 为假，下次加分类只能走「文末追加新块」，
+  // 原位置永远不再更新，反复开关会越积越多。空块装配时会被跳过，留两行注释无害。
+  assert.ok(cleared.includes(SCOPED_BEGIN))
   assert.ok(!cleared.includes('Minor-coded'))
   assert.match(cleared, /尾/)
 })
