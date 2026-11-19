@@ -210,7 +210,8 @@ cd ~/dsh-purge-go && sh install.sh
 > 脚本会把里面的每一项都做成指向仓库的**软链**，所以以后 `git pull` 更新仓库，
 > 原生界面跟着变，不用再单独同步 `package.json` 里的清单。
 
-> **不要用 npm 装。** `npm view dsh-go-purge` 会显示 `0.4.18`——那是 0.4.x 时代留下的旧版本，之后就没再发布过（发布通道断了）。
+> **不要用 npm 装。** `npm view dsh-go-purge` 会显示 `0.4.18`——那是 0.4.x 时代留下的旧版本，之后就没再发布过。
+> 原因：npm 账号被官方**暂时停用**（`Account temporarily disabled` / suspended，安全原因），提不了新版本。包本身还能下载，只是停在 0.4.18。
 > 用下面两条命令之一，才是当前版本。想知道拿到的是不是最新，跑 `node -p "require('./package.json').version"` 对一下 [Releases](https://github.com/NANA7MI0/dsh-purge-go/releases) 上的版本号。
 
 **git 拉不下来时**改用 tar 包（本机实测 `git clone` 会报 `could not read Username`）：
