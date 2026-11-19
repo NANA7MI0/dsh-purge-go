@@ -42,7 +42,13 @@ if [ "$DRY" = "1" ] && [ "$MODE" = "plugin" ]; then
   printf '✖ --dry 和 --plugin-only 不能一起用：前者只看不改，后者会真的装插件\n' >&2
   exit 1
 fi
-die() { printf '✖ %s\n' "$*" >&2; exit 1; }
+# 失败时统一提示一句怎么反馈——用户这时候最需要知道找谁。
+die() {
+  printf '✖ %s\n' "$*" >&2
+  printf '\n  自查没用的话，把上面这段输出发到 NANA7MI0@outlook.com\n' >&2
+  printf '  （附上版本号：node -p "require('"'"'%s/package.json'"'"').version"）\n' "$(dirname "$0")" >&2
+  exit 1
+}
 
 say ""
 say "════════════════════════════════════════"
