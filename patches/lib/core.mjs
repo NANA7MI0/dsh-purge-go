@@ -472,7 +472,7 @@ export function apply(root, opts = {}) {
     if (rounds > 1) logs.push("iter " + rel + " :: " + rounds + " 轮收敛");
     try {
       // 原子写：先写同目录临时文件、再 rename 覆盖。原来是直接 writeFileSync，
-      // 写到一半被中断（OOM / 断电 / Ctrl-C / 宿主热装配）会留下截断的引擎文件，
+      // 写到一半被中断（OOM / 断电 / Ctrl-C / 进程被杀）会留下截断的引擎文件，
       // 而且这种半截状态不走后面的校验和回滚。
       const tmp = file + ".purge-tmp-" + process.pid;
       fs.writeFileSync(tmp, text);

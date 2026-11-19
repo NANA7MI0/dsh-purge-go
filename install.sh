@@ -55,7 +55,7 @@ command -v dsh >/dev/null 2>&1 || die "找不到 dsh 命令。确认 dsh-go 已�
 
 cd "$HERE" || die "进不去 $HERE"
 
-# ── 第 1 步：打补丁（放在最前，因为它不触发插件热装配）──────────────
+# ── 第 1 步：打补丁（放在最前，因为它只改文件、不触发宿主重新装配）────
 if [ "$MODE" = "plugin" ]; then
   say "▸ 已跳过补丁层（--plugin-only）"
   say ""
@@ -114,7 +114,7 @@ else
   say ""
 fi
 
-# ── 第 2 步：装插件（放最后，它会热装配并可能打断当前工具调用）──────
+# ── 第 2 步：装插件（放最后，它会触发宿主重新装配插件层）──────────
 if [ "$DRY" = "1" ]; then
   say "  （预演模式不装插件）"
   say ""
@@ -124,17 +124,18 @@ fi
 say "▸ 第 2 步 / 2：装插件到 profile「$PROFILE」"
 say "  $HERE"
 say ""
-say "  注意：装插件会让宿主热装配，正在跑的命令可能在这里被中断，"
-say "  看到 aborted 不用管——补丁和第 2 步都已落地。"
+# 旧版引擎上这一步会把正在执行的那条命令掐掉（Error: tool call aborted）。
+# 现在实测不再发生；但顺序仍保持「先补丁后插件」，万一某台机器还会打断，
+# 补丁早已落地，被打断的只是收尾输出。
+say "  这一步会让宿主重新装配插件层。"
 say ""
 
 if dsh plugin --profile "$PROFILE" add "$HERE" 2>&1 | sed 's/^/  /'; then
   say "  ✔ 插件已装入"
 else
-  # 热装配导致的中断很常见，不当成失败：提示用户自己核对
+  # 返回非零不一定是真失败（旧版上装配会掐断命令）；别让用户盲目重装，先核对。
   say ""
-  say "  ⚠ dsh plugin add 返回非零（很可能是热装配中断了输出，不是真的失败）。"
-  say "    核对一下："
+  say "  ⚠ dsh plugin add 返回非零——先别重装，核对一下是不是已经装上了："
   say "      node -p 'require(process.env.HOME+\"/.dsh/profiles/web/package.json\").dependencies[\"dsh-purge-go\"]'"
   say "    有输出就说明装上了。"
   say ""
