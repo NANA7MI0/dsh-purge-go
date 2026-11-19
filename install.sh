@@ -139,8 +139,8 @@ if [ -f /etc/dsh-app/runtime.json ]; then
       fi
     fi
   done
-  if [ "$LINKED" -lt 10 ]; then
-    say "  ⚠ 只链上了 $LINKED/10 项，原生界面可能缺文件"
+  if [ "$LINKED" -lt 11 ]; then
+    say "  ⚠ 只链上了 $LINKED/11 项，原生界面可能缺文件"
   fi
   say "  ✔ 已链到 $HERE"
   say ""
@@ -168,7 +168,7 @@ else
   # 返回非零不一定是真失败（旧版上装配会掐断命令）；别让用户盲目重装，先核对。
   say ""
   say "  ⚠ dsh plugin add 返回非零——先别重装，核对一下是不是已经装上了："
-  say "      node -p 'require(process.env.HOME+\"/.dsh/profiles/web/package.json\").dependencies[\"dsh-purge-go\"]'"
+  say "      node -p 'require(process.env.HOME+\"/.dsh/profiles/web/package.json\").dependencies[\"dsh-go-purge\"]'"
   say "    有输出就说明装上了。"
   say ""
 fi
