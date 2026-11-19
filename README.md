@@ -183,7 +183,10 @@ case "read-only":
 
 ## 2. 安装
 
-> **动手前先确认两件事**：引擎版本是 `0.2.x`（`0.3.x` 装不上，会报 incompatible），手机上**没有**可用的沙箱后端（所以安装要跳过审批和沙箱——这是设计，不是偷懒）。
+> **动手前先确认两件事**：
+>
+> 1. **引擎版本必须是 0.2.x**。0.3.x 装不上，会直接报 `incompatible`。版本边界写在 `package.json` 的 `engines.dsh` 里，当前是 `>=0.2.1-rc.2 <0.3.0-0`。查当前版本：`node -p "require('/opt/dsh/node_modules/@deepseek-ai/dsh-base/package.json').version"`。
+> 2. **手机上没有任何沙箱后端**（bubblewrap、Landlock 都不存在）。所以安装必须跳过审批和沙箱——这是设计，不是偷懒，理由见 [第 6 章](#6-为什么必须去掉审批和沙箱)。
 > 版本边界、依赖、可用的命令这些前提都写在 [13. 环境](#13-环境)，装的时候出问题回去查。
 
 > **⚠️ 装完要记住一条：以后每次更新 App，都要重打一次补丁。**
@@ -205,7 +208,7 @@ cd ~/dsh-purge-go && sh install.sh
 
 **插件永远排最后**，因为它是整条流程里唯一可能打断命令的步骤（见 [2.2](#22-装插件的最后一步会触发宿主重新装配)）。补丁和原生目录都是纯文件操作，放在前面——万一真被打断，这两样已经落地，不会出现「有插件、但没胶囊没面板」这种没法自己修的状态。
 
-> **第三步只在手机端有意义。** dsh-go 的原生界面不在 profile 里，而是在
+> **第 2 步（建原生界面目录）只在手机端有意义。** dsh-go 的原生界面不在 profile 里，而是在
 > `~/.dsh/dsh-go/plugins/dsh-go-purge/`——那一层由 app 自己扫，`dsh plugin add` 不管。
 > 脚本会把里面的每一项都做成指向仓库的**软链**，所以以后 `git pull` 更新仓库，
 > 原生界面跟着变，不用再单独同步 `package.json` 里的清单。
@@ -276,24 +279,27 @@ cd ~/dsh-purge-go && node patches/purge-patch.mjs probe
 ### 2.3 不想用脚本：手动三步
 
 ```sh
-# 第一步：装插件（注入层）
-dsh plugin --profile web add ~/dsh-purge-go
-
-# 第二步：打补丁（补丁层）—— 不做这步，破甲只生效一半
+# 第一步：打补丁（补丁层）—— 不做这步，破甲只生效一半
 cd ~/dsh-purge-go
 node patches/purge-patch.mjs probe   # 先看哪些能打
 node patches/purge-patch.mjs apply   # 真打
 
-# 第三步：建原生界面目录（只有手机端要，胶囊/状态条/面板靠它）
+# 第二步：建原生界面目录（只有手机端要，胶囊/状态条/面板靠它）
 N=~/.dsh/dsh-go/plugins/dsh-go-purge
 rm -rf "$N" && mkdir -p "$N"
-for f in LICENSE NOTICE README.md assets cordis.patch.yml install.sh lib patches package.json; do
+for f in LICENSE NOTICE README.md assets cordis.patch.yml docs install.sh lib patches package.json; do
   [ -e ~/dsh-purge-go/$f ] && ln -sf ~/dsh-purge-go/$f "$N/$f"
 done
+
+# 第三步：装插件（注入层）—— 放最后，它会触发宿主重新装配
+dsh plugin --profile web add ~/dsh-purge-go
 ```
 
-**漏了第三步会怎样**：插件照常工作、`purge_*` 工具都在，但输入框上方**没有胶囊、没有状态条、点不开面板**——
+**漏了第二步会怎样**：插件照常工作、`purge_*` 工具都在，但输入框上方**没有胶囊、没有状态条、点不开面板**——
 因为那三样不在 profile 里，是 app 自己去 `~/.dsh/dsh-go/plugins/` 扫出来画的。
+
+**为什么手动流程也把装插件放最后**：它会触发宿主重新装配，是三步里唯一可能被打断的；
+前两步都是纯文件操作。万一第三步失败，补丁和原生目录已经就位，重跑一次即可。
 
 **破甲靠两层，装完只有一层：**
 
@@ -372,7 +378,7 @@ node patches/purge-patch.mjs restore --backup <备份目录>
 
 ### 3.1 实测分布
 
-> 下面这张表是 **dsh-go 0.2.2-rc.1 + dsh-go-purge 0.5.2、已 apply 过**的本机读数。你自己的机器可能不同，以 `probe` 为准。
+> 下面这张表是 **dsh-go 0.2.2-rc.1 + dsh-go-purge 0.5.3、已 apply 过**的本机读数。你自己的机器可能不同，以 `probe` 为准。
 >
 > 表里这几个状态词（`applied` / `hit` / `partial` / `miss` / `no_pkg` / `no_needle`）的准确定义在 [7. 状态含义](#7-状态含义)。先照着「数字对不对」看也行，读完这章再回去查词。
 
