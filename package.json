@@ -40,7 +40,8 @@
     "cordis.patch.yml",
     "LICENSE",
     "NOTICE",
-    "README.md"
+    "README.md",
+    "docs"
   ],
   "dshGo": {
     "v": 1,
