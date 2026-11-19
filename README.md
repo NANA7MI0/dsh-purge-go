@@ -201,14 +201,17 @@ git clone https://github.com/NANA7MI0/dsh-purge-go ~/dsh-purge-go
 cd ~/dsh-purge-go && sh install.sh
 ```
 
-`install.sh` 会连做三件事，次序是 **打补丁** → **装插件** → **建原生界面目录**，做完提示你重启。先补丁后插件是刻意的：装插件会触发宿主热装配、可能打断正在跑的命令，补丁放在前面就不会被它连累。
+`install.sh` 会连做三件事，次序是 **打补丁** → **装插件** → **建原生界面目录**，做完提示你重启。
 
-`install.sh` 做三件事：**打补丁**（补丁层）+ **装插件**（注入层）+ **建原生界面目录**（输入框上方的胶囊、状态条、面板）。
+先补丁后插件是刻意的：装插件会触发宿主热装配、可能打断正在跑的命令，补丁放在前面就不会被它连累。
 
 > **第三步只在手机端有意义。** dsh-go 的原生界面不在 profile 里，而是在
 > `~/.dsh/dsh-go/plugins/dsh-go-purge/`——那一层由 app 自己扫，`dsh plugin add` 不管。
 > 脚本会把里面的每一项都做成指向仓库的**软链**，所以以后 `git pull` 更新仓库，
 > 原生界面跟着变，不用再单独同步 `package.json` 里的清单。
+
+> **不要用 npm 装。** `npm view dsh-go-purge` 会显示 `0.4.18`——那是 0.4.x 时代留下的旧版本，之后就没再发布过（发布通道断了）。
+> 用下面两条命令之一，才是当前版本。想知道拿到的是不是最新，跑 `node -p "require('./package.json').version"` 对一下 [Releases](https://github.com/NANA7MI0/dsh-purge-go/releases) 上的版本号。
 
 **git 拉不下来时**改用 tar 包（本机实测 `git clone` 会报 `could not read Username`）：
 
