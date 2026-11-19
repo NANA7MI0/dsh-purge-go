@@ -583,21 +583,17 @@ cat ~/.dsh/dsh-purge/state.json            # 应该有 "enabled": true
 >
 > 两者读同一份数据，数字永远一致。点状态条也是进同一个面板。
 
-### 5.2 用嘴指挥它
+### 5.2 不走界面的时候
 
-上面那些工具你不用记参数，直接说话就行：
+面板能做的事，命令行也都能做——不需要插件、不需要 AI、不需要打开 App：
 
-| 你说 | 它会做 |
-|---|---|
-| 「帮我开破甲」/「重新开一下」 | `purge_apply` |
-| 「关掉」 | `purge_revert` |
-| 「现在什么状态」/「补丁打了几条」 | `purge_status` |
-| **「重打补丁」** | `purge_patch_apply` ← **App 更新后最常用这句** |
-| 「把正文换成我自己写的」（附文件） | `purge_prompt` 的 `set` |
-| 「加一个题材分类」 | `purge_category` 的 `add` |
+```sh
+node patches/purge-patch.mjs probe      # 看状态：哪些能打、哪些已经打了
+node patches/purge-patch.mjs apply      # 打补丁
+node patches/purge-patch.mjs restore    # 还原补丁
+```
 
-**纯命令行也有一套**（不依赖插件、不依赖 AI）：
-`node patches/purge-patch.mjs probe | apply | restore`，见 [第 3 章](#3-打补丁)。
+注入层的开关用斜杠命令：`/purge on` / `/purge off`，看状态用 `/purge status`（完整列表见上一节）。
 
 ---
 
@@ -1209,7 +1205,7 @@ VPS 地址（技能里还是 `<你的VPS_IP>` 占位符）、`toolkit/` 下的 `
 - [4. 装好即生效，怎么确认](#4-装好即生效怎么确认)
 - [5. 6 个操作工具](#5-6-个操作工具)
   - [5.1 面板长什么样](#51-面板长什么样)
-  - [5.2 用嘴指挥它](#52-用嘴指挥它)
+  - [5.2 不走界面的时候](#52-不走界面的时候)
 - [6. 为什么必须去掉审批和沙箱](#6-为什么必须去掉审批和沙箱)
 - [7. 状态含义](#7-状态含义)
 - [8. 关键补丁](#8-关键补丁)
