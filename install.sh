@@ -98,7 +98,10 @@ else
   # 不传 --backup 的话 CLI 会建在仓库目录（backup-<时间戳>），插件的「还原补丁」
   # 就找不到——第一次安装的人点了只会看到「没有可还原的补丁备份」。
   # 加毫秒随机后缀，避免同一秒内重跑覆盖上一份真备份
-  BACKUP_DIR="$HOME/.dsh/dsh-purge/patch-backup/$(date +%Y%m%d%H%M%S)-$$"
+  # 用 UTC（date -u）与 CLI／插件保持一致：那两处都是 toISOString()。
+  # 混用本地时间会让目录名排序错乱——本地比 UTC 快 8 小时，
+  # 「19:45 本地」会排到「12:38 UTC」后面，而后者其实更新。
+  BACKUP_DIR="$HOME/.dsh/dsh-purge/patch-backup/$(date -u +%Y%m%d%H%M%S)-$$"
   mkdir -p "$BACKUP_DIR"
   # 不能写成 `if node ... | sed`：if 看的是管道最后一个命令（sed）的退出码，
   # sed 恒返回 0，于是补丁全失败也照样打印「✔ 补丁已打上」并以 0 退出。

@@ -269,6 +269,22 @@ export function restoreScript(root) {
  * 其余扩展名无法可靠校验，返回 null 但由调用方标记为 unverified。
  */
 /** 文件的 sha256（用于备份完整性校验）。 */
+/** 读引擎版本（任何 @deepseek-ai 包都行，优先 dsh-base）。读不到就返回 null，不阻断流程。 */
+export function engineVersion(root) {
+  const names = ["dsh-base", "dsh-session", "dsh-agent-loop"];
+  for (const n of names) {
+    try {
+      const v = JSON.parse(fs.readFileSync(path.join(root, n, "package.json"), "utf8")).version;
+      if (typeof v === "string" && v) return v;
+    } catch { /* 这个包不在，试下一个 */ }
+  }
+  return null;
+}
+
+/** 备份要记的引擎身份：版本 + 真实 root。 */
+export function engineInfo(root) {
+  return { version: engineVersion(root) };
+}
 export function sha256(file) {
   try {
     return createHash("sha256").update(fs.readFileSync(file)).digest("hex")
@@ -387,7 +403,10 @@ export function apply(root, opts = {}) {
   }
   const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
   const dir = backupDir || path.join(cwd, "backup-" + stamp);
-  const manifest = { root, at: new Date().toISOString(), files: [] };
+  // 记下引擎版本：还原时要用它判断「这份备份是不是当前这版引擎的」。
+  // 没有它的话，App 更新后如果不重打补丁就直接点还原，会把旧版引擎的原始文件
+  // 写进新版引擎里——版本对不上，轻则补丁失效，重则引擎起不来。
+  const manifest = { root, at: new Date().toISOString(), engine: engineInfo(root), files: [] };
   for (const file of byFile.keys()) {
     const rel = path.relative(root, file);
     if (!dry) {
@@ -583,6 +602,28 @@ export function restore(backupDir, opts = {}) {
     warnings.push(`备份来自 ${manifest.root}，本次还原到 ${opts.root}，路径不一致`);
   }
 
+  // 版本校验：备份是给哪个引擎版本打的，就必须还原到那个版本上。
+  // 这是「App 更新后没重打补丁就点还原」的唯一防线——那种情况下最新备份是旧版的，
+  // 硬写回去等于用旧文件覆盖新引擎，补丁失效算轻的，版本对不上会让引擎起不来。
+  // 备份没记版本（旧备份）时只警告不拦，否则老用户全被卡死。
+  const currentVersion = engineVersion(root);
+  const backupVersion = manifest?.engine?.version ?? null;
+  const engineMismatch = Boolean(backupVersion && currentVersion && backupVersion !== currentVersion);
+  if (engineMismatch) {
+    errors.push({
+      error: `备份来自引擎 ${backupVersion}，当前是 ${currentVersion}。这份备份不能用来还原——` +
+        "先点「一键注入」重打一次，会生成当前版本的备份。",
+    });
+  } else if (backupVersion === null && manifest !== null) {
+    warnings.push("这份备份是很早以前打的，没记引擎版本，无法确认是否匹配");
+  }
+  // 版本不匹配时必须立刻返回——不能记一条错就接着写文件，
+  // 那等于明知会写坏还照写一遍。
+  if (engineMismatch) {
+    logs.push("REFUSED: engine version mismatch");
+    return { restored: 0, files, logs, errors, warnings, root, rootMismatch, hasManifest: true, engineMismatch: true, backupVersion, currentVersion };
+  }
+
   let n = 0;
   const restoreOne = (rel) => {
     const from = path.join(src, rel);
@@ -651,7 +692,7 @@ export function restore(backupDir, opts = {}) {
 
   logs.push("\nrestored " + n + " file(s)");
   for (const w of warnings) logs.push("WARN " + w);
-  return { restored: n, files, logs, errors, warnings, root, rootMismatch, hasManifest: Boolean(manifest) };
+  return { restored: n, files, logs, errors, warnings, root, rootMismatch, hasManifest: Boolean(manifest), engineMismatch: false, backupVersion, currentVersion };
 }
 
 /** 数一个目录下有多少个文件（用于对照 manifest）。 */
