@@ -177,7 +177,7 @@ git clone https://github.com/NANA7MI0/dsh-purge-go ~/dsh-purge-go
 cd ~/dsh-purge-go && sh install.sh
 ```
 
-`install.sh` 会连做两件事：**装插件**（注入层）+ **打补丁**（补丁层），做完提示你重启。
+`install.sh` 会连做三件事，次序是 **打补丁** → **装插件** → **建原生界面目录**，做完提示你重启。先补丁后插件是刻意的：装插件会触发宿主热装配、可能打断正在跑的命令，补丁放在前面就不会被它连累。
 
 `install.sh` 做三件事：**打补丁**（补丁层）+ **装插件**（注入层）+ **建原生界面目录**（输入框上方的胶囊、状态条、面板）。
 
@@ -206,7 +206,7 @@ cd ~/dsh-purge-go && sh install.sh
 |---|---|
 | 不带参数 | 打补丁 + 装插件 + 建原生界面目录（**推荐**） |
 | `sh install.sh --plugin-only` | 只装插件，不打补丁。注入层生效，引擎的审批和沙箱限制仍在 |
-| `sh install.sh --dry` | 只扫描 + 预演补丁会改哪些文件，**不装插件、不改任何文件** |
+| `sh install.sh --dry` | 只扫描 + 预演补丁会改哪些文件，**不装插件、不改引擎、不在仓库里留文件**（probe 结果写临时目录）。和 `--plugin-only` 一起给会直接报错 |
 | `sh install.sh --profile web` | 指定 profile，默认 `web` |
 
 装到哪个目录都行，用 `~`（也就是 `$HOME`）而不是写死 `/root`——因为**不同环境家目录不一样**：
@@ -269,7 +269,7 @@ done
 
 **只装插件不打补丁 = 只有一半。** 注入层能把官方身份段压掉，但引擎的审批和沙箱限制原样还在。
 
-补丁层会**改 32 个引擎包**、**必须重启引擎才生效**（重启会中断当前对话）。完整命令见 [3. 打补丁](#3-打补丁)。
+补丁层会**改 37 个引擎包**、**必须重启引擎才生效**（重启会中断当前对话）。完整命令见 [3. 打补丁](#3-打补丁)。
 
 ### 2.4 不用手动准备注入正文
 
@@ -277,9 +277,9 @@ done
 `~/.dsh/prompt-inject.md`，并默认开启。想换成自己写的，装好之后用 `purge_prompt` 的 `set`
 或直接编辑那个文件都行。
 
-### 2.4.1 从 0.4 或更早升级到 0.5
+### 2.4.1 从旧版本升级到 0.5.x
 
-**重跑一次 `sh install.sh` 就行，不要只 `git pull`。**
+**重跑一次 `sh install.sh` 就行，不要只 `git pull`。**（0.5.0 用户也一样——「建原生界面目录」是 0.5.1 才补进脚本的）
 
 原因：0.5 起原生界面的清单（胶囊、状态条、面板）改成了「指向仓库的软链」。老安装里的
 `~/.dsh/dsh-go/plugins/dsh-go-purge/package.json` 是**独立文件**——只 pull 仓库，它不会变，
@@ -321,16 +321,16 @@ am force-stop io.github.ccch1mneyyy.dsh_app
 > **这是安装的第二步。** [第 2 章](#2-安装)只装了插件（注入层），补丁层要单独跑这一步才算完整破甲。
 > 不打补丁的话，注入层照样生效，但引擎的审批和沙箱限制原样还在。
 >
-> 补丁会改 32 个引擎包、**必须重启引擎才生效**。
+> 补丁会改 37 个引擎包、**必须重启引擎才生效**。
 
 ```sh
 node patches/purge-patch.mjs probe            # 扫描：哪些能打、哪些版本不匹配（会在当前目录写 patch-probe.json）
 node patches/purge-patch.mjs apply --dry      # 预演：会改哪些文件
 node patches/purge-patch.mjs apply            # 真打
-node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
+node patches/purge-patch.mjs restore --backup <备份目录>
 ```
 
-`apply` 会把要改的文件先复制到 `backup-<时间戳>/files/`，生成可执行的 `restore.sh`，
+`apply` 会把要改的文件先复制到 `backup-<YYYYMMDDHHMMSS>/files/`（**直接用 CLI 跑时在仓库目录；用 `install.sh` 装时在 `~/.dsh/dsh-purge/patch-backup/`**），生成可执行的 `restore.sh`，
 每个 `.js` 改完立刻 `node --check` —— 语法不过就当场从备份还原，不留半成品。
 
 `--root` 或环境变量 `DSH_AI_ROOT` 可指定引擎包目录，默认自动探测。
@@ -446,9 +446,9 @@ cat ~/.dsh/dsh-purge/state.json            # 应该有 "enabled": true
 
 ---
 
-## 5. 5 个操作工具
+## 5. 6 个操作工具
 
-装好之后，对话里会多出五个工具：
+装好之后，对话里会多出六个工具：
 
 | 工具 | 干什么 |
 |---|---|
@@ -457,16 +457,23 @@ cat ~/.dsh/dsh-purge/state.json            # 应该有 "enabled": true
 | `purge_revert` | 关闭破甲，把当前正文备份到 `dsh-purge/backups/`（正文本身保留） |
 | `purge_prompt` | 读写注入正文与变体。`show` / `set` / `reset` / `use` / `default` / `map`（按模型指定变体） |
 | `purge_category` | 题材分类扩展层。`list` / `add` / `rm` / `on` / `off` / `reset` / `bake` |
+| `purge_patch_apply` | **打补丁层**。`apply`（打）/ `restore`（还原）/ `probe`（只看）。走子进程执行、带 120 秒超时，比面板按钮更稳，适合让 AI 代劳 |
 
 除了工具，还注册了一个斜杠命令 `/purge`，可以直接在输入框敲：
 `/purge prompt set /sdcard/x.md`（从文件读正文）、`/purge status` 等。
 
-**除 `purge_status` 外，其余四个只管注入层。** 补丁（`patches.json` 那 86 条）没有对应的工具，
-只能在命令行打，见 [第 3 章 打补丁](#3-打补丁)。
+**前五个管注入层，`purge_patch_apply` 管补丁层。** 补丁同样可以在命令行打
+（`node patches/purge-patch.mjs apply`，见 [第 3 章](#3-打补丁)），两条路等价。
+
+三个入口各管一部分，挑顺手的用：
+
+- **点输入框上方的「破甲状态」胶囊** —— 打开面板，一眼看两层，四个按钮直接操作（最直观）
+- **说一句「跑 purge_status」** —— 让 AI 调工具读给你听（适合不在手机上时）
+- **说一句「重打补丁」** —— 让 AI 调 `purge_patch_apply`（App 更新把补丁冲掉之后最常用）
 
 所以你想「让 AI 帮我开破甲」——直接说，它会调 `purge_apply`；
 想「把注入正文换成我自己写的」——用 `purge_prompt` 的 `set`；
-想「现在补丁打了几条」——点输入框上方的胶囊，它一次报两层。
+想「补丁打了几条」——点胶囊，或者让 AI 跑 `purge_status`。
 
 ---
 
@@ -494,7 +501,7 @@ cat ~/.dsh/dsh-purge/state.json            # 应该有 "enabled": true
 | #34 | 沙箱提示中性化 | 提示词 |
 | #36 | 文件系统升级 schema 放行 | 提示词 |
 
-> 表里的 id 是**历史编号**，删掉的 #21 不再占用，所以会出现「86 条里编号到 93」的情况。
+> 表里的 id 是**历史编号**，最大到 93，中间空了 7 个（#20 #21 #27 #41 #44 #79 #81，都已删除或合并），所以是「86 条补丁、编号到 93」。
 
 这十条在本仓库的 86 条里**定义都在**；其中 #13 / #14 / #34 的目标包手机上不存在
 （`probe` 报 `no_pkg`），实际生效的是七条（#36 也完整命中）。也就是说，**dsh-purge 一直把"破甲"
@@ -549,24 +556,35 @@ dsh-purge 的选择是把 fail-closed 改成 fail-open——审批环节整个�
 
 | 状态 | 含义 |
 |---|---|
-| `hit` | 所有查找串都在，可以打 |
-| `partial` | 部分命中，**正常情况，不用管**（见下） |
-| `applied` | 检测到标记，已经打过了（不会重复打） |
-| `miss` | 一条都对不上——版本不同，跳过 |
-| `no_pkg` / `no_file` | 目标包或文件不存在 |
-| `no_needle` | 数据里 `pattern` 为空或不可用，命中不了（数据残缺，不是版本漂移） |
+| `applied` | **目标状态已满足**——该改的地方都改了，或者本来就不需要改（见下） |
+| `hit` | 查找串还在，**可以打但还没打** |
+| `partial` | **只打了一部分**：这条补丁的目标里有几处对不上（见 7.1） |
+| `drifted` | **打过但被冲掉了**：App 更新重装引擎包，标记还在、改动没了。点「一键注入」重打 |
+| `miss` | 一条都对不上——版本不同，这段代码已经不在了 |
+| `no_pkg` | 目标包没装（桌面专属的那些就是这样） |
+| `no_file` | 目标包在、文件不在 |
+| `no_needle` | 数据里这条的 `pattern` 不可用，命中不了 |
 
-### 7.1 `partial` 是正常的，不用管
+### 7.1 `partial` 要具体看，不能一概当「正常」
 
-**看到 `partial` 不用担心，它对破甲能力没有任何影响。**
+**先说清楚一件事：`partial` 不是「一套写法全中、其余是备用分支」。**
 
-补丁表里每条补丁都写了好几套「不同引擎版本的查找串」——同一段代码，引擎在不同版本里变量名、循环位置都改过。你的引擎只会有其中一套。
+补丁表里一条补丁可能有多处要改（`replacements` 有 239 条，52 条补丁不止一组）。执行器判定的是「**这条补丁还有几处没改到位**」：
 
-所以 `partial` 的意思是：**表里那几套写法，你的引擎匹配上了其中一套，那套已经改好了**。剩下没匹配的，是别的版本和桌面版的备用分支，本来就不该在这台机器上出现。
+- 一处都没落下 → `applied`
+- 一处都没改成 → `hit`（从来没打过）或 `drifted`（打过被冲掉）
+- **中间的 → `partial`：改了一部分，还剩一部分**
 
-判断标准很简单：**看 `applied` 和 `partial` 加起来有多少条**。这两个都是「已经生效」，区别只是「一套写法全中」还是「多套写法中了一套」。
+**所以 `partial` 的真实含义是「没改全」，不是我早期文档里写的「已经生效」。**
 
-真正需要关注的是 `miss`——一条都对不上，说明引擎改得太多、这段代码已经不存在了。
+实测：在**完全没打过补丁的原版引擎**上跑 `probe`，结果是 `partial 22`。那 22 条一条都没被打过，只是它们的目标里有一部分在这个引擎版本上本来就不存在（换了变量名、删了那段代码），于是被判成「改了一部分」。
+
+**判断破甲健不健康，只看 `applied` 的数量**（阈值见 [16. 升级引擎](#16-升级引擎--更新-app-之后)：低于 10 条就判定被覆盖）。
+
+**看到 `partial` 该怎么办**：先看 `hits/total`。如果 `hits` 很小（比如 2/6），说明大部分已经改好；如果 `hits` 接近 `total`，说明基本没打上，跟 `hit` 一样处理——点「一键注入」。
+
+**真正不用管的是 `no_pkg` 和 `no_needle`**：一个是有 29 条只针对桌面端的包，一个是数据缺陷。
+
 
 
 ---
@@ -592,7 +610,7 @@ dsh-purge 的选择是把 fail-closed 改成 fail-open——审批环节整个�
 |---|---|---|
 | 目标 | PC 上的 DSH | dsh-go |
 | 注入方式 | 自带 `core.js`（177 KB，补丁表已拆去 `lib/patches/`），正则逐句改写 + `defineProperty` 劫持 | 官方 waterfall 整段丢弃 |
-| 规模 | 518 文件 / 305 个 js+mjs / 4.83 MB | **35 文件 / 605 KB** |
+| 规模 | 518 文件 / 305 个 js+mjs / 4.83 MB | **35 文件 / 530 KB** |
 | 补丁 | 自带（`lib/patches/` 拆成 6 个模块，83 条） | 导成 `patches.json`（86 条）+ 独立执行器 |
 | 桌面功能 | asar 解包、计划任务 | 无 |
 | 面板 | `packages/purge-panel/` 独立 Web 面板 | 无（试过移植，放弃） |
@@ -636,7 +654,7 @@ dsh-purge 的选择是把 fail-closed 改成 fail-open——审批环节整个�
 dsh-go 是 Flutter 原生界面，不加载 Web client 模块，面板在上面根本不会出现。
 而用 dsh-go 的人基本都在 App 里，不会为了看个面板专门开浏览器。
 
-**影响：只少一个可视化界面，数据层完全不受影响。** 面板每个页签背后都只是调工具读数据；
+**影响：只少一个 Web 可视化界面，数据层完全不受影响。**（手机端的原生面板是另一套东西，0.5.0 起就有，不受这条影响，见 [第 5 章](#5-6-个操作工具)。）面板每个页签背后都只是调工具读数据；
 没有面板，直接在对话里让 AI 调，拿到的数据一样，只是多花点 token。
 
 > 红队插件自带的右侧控制台同理：装好之后在 dsh-go 里看不到，但它的 10 个页签（资产测绘、
@@ -690,7 +708,7 @@ Electron、asar、Windows 控制台那套在 Android 上没有落点——详见
 | 层 | 换 API 后 |
 |---|---|
 | 注入层（丢身份段、拼注入正文） | ✅ 照常工作。走的是引擎的 `system-prompt/assemble`，跟用哪个模型无关 |
-| 补丁层核心 40 来条（审批、沙箱、身份、压缩） | ✅ 照常工作。改的是 `node_modules` 里的源码 |
+| 补丁层核心 40 来条（审批、沙箱、身份、压缩；判定阈值另算，见第 16 章） | ✅ 照常工作。改的是 `node_modules` 里的源码 |
 | 补丁层 5 条模型相关 | ⚠️ 可能失效，不影响大局 |
 | **注入正文的写法** | ⚠️ **要重写**，见下 |
 
@@ -725,17 +743,17 @@ Electron、asar、Windows 控制台那套在 Android 上没有落点——详见
 | Node | 20+（用到 `node --check` 和 ESM） |
 | **包管理器** | **pnpm**（`dsh plugin` 底层就是调 pnpm，缺了会报 `dsh: pnpm was not found`） |
 | 运行时依赖 | 零。插件本身只用 Node 内置模块 |
-| 体积 | 35 个文件 / 605 KB |
+| 体积 | 35 个文件 / 530 KB |
 
 **引擎版本边界**：`package.json` 里写的是 `engines.dsh: ">=0.2.1-rc.2 <0.3.0"`。
 引擎升到 0.3.x 之后 `dsh plugin add` 会**直接拒绝安装**：
 
 ```
-dsh: installation rejected: Plugin ... is incompatible with dsh 0.3.x
-dsh: nothing was installed.
+dsh: to accept the risk, run: dsh plugin --profile web allow-version dsh-go-purge@<版本> --dsh-version <当前引擎版本> --accept-risk
+dsh: plugin command failed; diagnostics: ...
 ```
 
-真要试就加 `--allow-version`（`dsh plugin --profile web allow-version dsh-go-purge`），
+真要试就照它给的那行敲，**三个参数一个都不能少**（`包名@版本`、`--dsh-version <精确版本>`、`--accept-risk`）。
 但补丁层的查找串大概率对不上，先跑 `probe` 看命中率。
 
 别的引擎版本也是同理：**先 `probe`，别直接 `apply`**。
@@ -759,7 +777,10 @@ dsh: nothing was installed.
 ```sh
 # ① 还原补丁层（最容易漏，也最重要）
 cd ~/dsh-purge-go
-node patches/purge-patch.mjs restore --backup ./backup-<时间戳>
+# 备份在哪取决于你怎么装的：install.sh 装 → ~/.dsh/dsh-purge/patch-backup/<时间戳>
+#                             手动 CLI 打 → ./backup-<时间戳>
+ls -d ~/.dsh/dsh-purge/patch-backup/* ./backup-* 2>/dev/null
+node patches/purge-patch.mjs restore --backup <上面列出的最后一批>
 
 # ② 从 profile 摘掉插件
 dsh plugin --profile web remove dsh-go-purge
@@ -782,7 +803,7 @@ am force-stop io.github.ccch1mneyyy.dsh_app
 
 | 层 | 在哪 | 卸掉的方法 | 漏了会怎样 |
 |---|---|---|---|
-| **补丁层** | `/opt/dsh/node_modules/@deepseek-ai/` 下 32 个包 | `purge-patch.mjs restore` | **引擎源码仍是破甲状态**，AI 一眼能看出被改过 |
+| **补丁层** | `/opt/dsh/node_modules/@deepseek-ai/` 下 37 个包 | `purge-patch.mjs restore` | **引擎源码仍是破甲状态**，AI 一眼能看出被改过 |
 | **注入层** | `~/.dsh/prompt-inject.md` | 删文件 | 每次开对话都往系统提示里塞破甲正文 |
 | **插件注册** | `~/.dsh/profiles/web/package.json` | `dsh plugin remove` | 重启后插件又加载回来 |
 | **插件文件** | `~/dsh-purge-go`、`node_modules` 软链 | `rm -rf` | 占空间；重装时可能撞路径 |
@@ -814,11 +835,11 @@ ls ~/.dsh/dsh-go/plugins/ 2>/dev/null    # 没有 dsh-go-purge 就算干净
 
 ## 15. 还原引擎（备份还在 / 备份没了）
 
-补丁打的是 `/opt/dsh/node_modules/@deepseek-ai/` 下的 32 个包。还原有两条路，取决于**你手上还有没有 apply 时生成的备份**。
+补丁打的是 `/opt/dsh/node_modules/@deepseek-ai/` 下的 37 个包。还原有两条路，取决于**你手上还有没有 apply 时生成的备份**。
 
 ### 15.1 有备份：用 restore
 
-`apply` 每次都会在仓库目录下生成 `backup-<毫秒时间戳>/files/`，里面是**被这次补丁改过的文件的原始副本**。
+`apply` 每次会生成 `backup-<YYYYMMDDHHMMSS>/files/`（秒级时间戳）：直接用 CLI 跑时在仓库目录，用 `install.sh` 装时在 `~/.dsh/dsh-purge/patch-backup/`，里面是**被这次补丁改过的文件的原始副本**。
 
 ```sh
 cd ~/dsh-purge-go
@@ -852,22 +873,23 @@ npm install --force
 
 #### 方案 B：只重装确定被改的包
 
-不想动整个 `node_modules` 的话，只覆盖被改的那 32 个：
+不想动整个 `node_modules` 的话，只覆盖被改的那 37 个：
 
 ```sh
 # 先确认引擎版本（从任一包读）
 V=$(node -p "require('/opt/dsh/node_modules/@deepseek-ai/dsh-base/package.json').version")
 # 例如 0.2.2-rc.1
 
-for P in dsh-agent-loop dsh-user-approval dsh-system-prompt dsh-agent-instructions \
-         dsh-sandbox-local dsh-base dsh-tool-fs dsh-subagent dsh-tool-bash \
-         dsh-llm-deepseek dsh-sandbox-policy dsh-api-session-controller dsh-fs-sandbox \
-         dsh-fs-observation-policy dsh-repeat-tool-reminder \
-         dsh-compaction-tool-result-pruner dsh-web-app dsh-tool-web dsh-persona \
-         dsh-session-format-v0-to-v1 dsh-settings dsh-session-reference \
-         dsh-permission-presets dsh-session-log-deepseek dsh-harness-dev-context \
-         dsh-deliverable-file-references dsh-tool-todo dsh-session \
-         dsh-experimental-auto-review dsh-app-boot dsh-skill-badge dsh-client-connection; do
+for P in dsh-acp-app dsh-agent-instructions dsh-agent-loop dsh-api-session-controller \
+         dsh-app-boot dsh-base dsh-client-connection dsh-compaction-tool-result-pruner \
+         dsh-deliverable-file-references dsh-experimental-auto-review \
+         dsh-fs-observation-policy dsh-fs-sandbox dsh-harness-dev-context dsh-headless \
+         dsh-llm-deepseek dsh-permission-presets dsh-persona dsh-repeat-tool-reminder \
+         dsh-sandbox-local dsh-sandbox-policy dsh-sdk-app dsh-session \
+         dsh-session-format-v0-to-v1 dsh-session-log-deepseek dsh-session-reference \
+         dsh-settings dsh-skill-badge dsh-subagent dsh-system-prompt dsh-tool-bash \
+         dsh-tool-fs dsh-tool-pwsh dsh-tool-subagent dsh-tool-todo dsh-tool-web \
+         dsh-user-approval dsh-web-app; do
   TARBALL="/tmp/$P.tgz"
   curl -sL "https://registry.npmmirror.com/@deepseek-ai/$P/-/$P-$V.tgz" -o "$TARBALL"
   rm -rf "/opt/dsh/node_modules/@deepseek-ai/$P"
@@ -879,7 +901,10 @@ done
 rm -rf /tmp/px /tmp/*.tgz
 ```
 
-**这 32 个包怎么来的**：跑 `probe`，取 `status === 'applied'` 的 `pkg` 字段去重。
+**这 37 个包怎么来的**：跑 `probe`，对 `status === 'applied'` 的行取 `files` 字段里出现的包名去重。
+
+> **注意别用 `pkg` 字段**：一条补丁可能同时改好几个包（比如 #4 命中 base / web-app / headless / sdk-app / acp-app 五个），
+> 但 `pkg` 只记其中一个代表。按 `pkg` 去重只能得到 32 个，会漏掉 headless、sdk-app、acp-app、tool-subagent、tool-pwsh 这 5 个。
 
 ### 15.3 验证有没有还原干净
 
@@ -889,7 +914,7 @@ rm -rf /tmp/px /tmp/*.tgz
 V=$(node -p "require('/opt/dsh/node_modules/@deepseek-ai/dsh-base/package.json').version")
 mkdir -p /tmp/vf && cd /tmp/vf
 
-for P in <上面那 32 个包>; do
+for P in <上面那 37 个包>; do
   curl -sL "https://registry.npmmirror.com/@deepseek-ai/$P/-/$P-$V.tgz" -o "$P.tgz"
   mkdir -p "ex-$P" && tar xzf "$P.tgz" -C "ex-$P"
   D=$(diff -r "ex-$P/package" "/opt/dsh/node_modules/@deepseek-ai/$P" \
@@ -899,7 +924,7 @@ done
 # 全部 0 处即为完全还原
 ```
 
-**为什么不能只看 `probe`**：`probe` 只判断「pattern 字符串在不在文件里」，分不清「这是原版」还是「补丁已经打过了」——原版状态下 `partial` 有 22 条、`applied` 有 1 条，看起来像没卸干净，其实是补丁表自己的备选分支设计。
+**为什么不能只看 `probe`**：`probe` 只判断「pattern 字符串在不在文件里」，分不清「这是原版」还是「补丁已经打过了」——原版状态下 `partial` 有 22 条、`applied` 有 2 条、`hit` 有 30 条，看起来像没卸干净，其实是补丁表自己的备选分支设计。
 
 ### 15.4 还原后必须重启
 
@@ -916,13 +941,13 @@ am force-stop io.github.ccch1mneyyy.dsh_app
 **两种情况都会让补丁失效**：
 
 - **升级引擎**：自己跑 `npm install`、或按 §15 还原
-- **更新 App**：从 GitHub 装新版 APK。App 启动时会重新铺一遍 `/opt/dsh/node_modules/@deepseek-ai/`，实测 333 个包的时间戳全部刷新、补丁一条不剩。**这一点最容易被忽略**——你什么都没干，只是装了个新版 App，破甲就剩一半了。
+- **更新 App**：从 GitHub 装新版 APK。App 启动时会重新铺一遍 `/opt/dsh/node_modules/@deepseek-ai/`，实测 331 个包的时间戳全部刷新、补丁一条不剩。**这一点最容易被忽略**——你什么都没干，只是装了个新版 App，破甲就剩一半了。
 
 **怎么知道自己中招了**：点输入框上方的「破甲状态」胶囊，顶部出现红字
 
 ```
 ⚠️ 破甲异常：补丁层被覆盖了
-  当前只有 1/86 条生效（正常在 40 条以上）
+  当前只有 N/86 条生效（低于 10 条即判定被覆盖）
 ```
 
 就说明补丁被冲掉了。注入层不受影响（走官方扩展点），失效的只有补丁层。
@@ -1033,7 +1058,7 @@ VPS 地址（技能里还是 `<你的VPS_IP>` 占位符）、`toolkit/` 下的 `
 - [2. 安装](#2-安装)
 - [3. 打补丁](#3-打补丁)
 - [4. 装好即生效，怎么确认](#4-装好即生效怎么确认)
-- [5. 5 个操作工具](#5-5-个操作工具)
+- [5. 6 个操作工具](#5-6-个操作工具)
 - [6. 为什么必须去掉审批和沙箱](#6-为什么必须去掉审批和沙箱)
 - [7. 状态含义](#7-状态含义)
 - [8. 关键补丁](#8-关键补丁)
@@ -1070,7 +1095,7 @@ NOTICE            三部分来源与各自许可
 README.md         本文
 ```
 
-合计 **35 个文件、605 KB**。
+合计 **35 个文件、530 KB**。
 
 改 `lib/` 之后必须重启引擎；改 `package.json` 会被热读。
 
