@@ -65,7 +65,7 @@
 
 它**不逐句改写**系统提示里的安全约束——这是和早期实现最大的区别。
 
-**补丁层**：在 `node_modules` 里做精确字符串替换，改掉引擎里写死的行为。补丁不依赖行号，
+**补丁层**：在 `node_modules` 里做字符串替换（231 条是精确字面量，3 条用正则），改掉引擎里写死的行为。补丁不依赖行号，
 版本漂移时只会「没命中」，不会改坏文件。
 
 这一层是**破甲的另一半**，缺了它只是「说得像」，不是「做得到」。它改的是执行侧：
@@ -337,13 +337,13 @@ node patches/purge-patch.mjs restore --backup <备份目录>
 
 ### 3.1 实测分布
 
-> 下面这张表是 **dsh-go 0.2.2-rc.1 + dsh-go-purge 0.4.8、已 apply 过**的本机读数。你自己的机器可能不同，以 `probe` 为准。
+> 下面这张表是 **dsh-go 0.2.2-rc.1 + dsh-go-purge 0.5.2、已 apply 过**的本机读数。你自己的机器可能不同，以 `probe` 为准。
 
 | 状态 | 条数 | 意味着 |
 |---|---|---|
 | `applied` | **55** | 所有目标包都打过了 |
 | `no_pkg` | 29 | 桌面壳、OAuth、preset 那类包，手机上没有 |
-| `no_needle` | 1 | 数据里这条的 pattern 是空的（#77） |
+| `no_needle` | 1 | 这条的 pattern 在数据里是坏的（#77，导出时正则丢了 `.source`，序列化成 `[object Object]`） |
 | `miss` | 1 | 查找串对不上（#56） |
 
 合计 86。换引擎版本后分布会变，先跑 `probe` 再决定。
@@ -394,8 +394,9 @@ system-prompt-nested     →  dsh-system-prompt
 subagent-types           →  dsh-subagent
 ```
 
-**这批没丢**——`patches.json` 里这些补丁的 `file` 字段本来就并列写了两种名字，
-执行器 `candidatesFor()` 会挨个试，找到存在的那个：
+**这批没丢**，但**不是靠「别名表」映射的**——没有那样一张表。实际情况是
+`patches.json` 里这些补丁的 `file` 字段**并列写了两个名字**，执行器 `candidatesFor()`
+会挨个试，哪个存在就用哪个。也就是说真正起作用的是「另一个名字」，不是把前者翻译成后者：
 
 ```json
 #5   file: ["user-approval", "user-approval-invariant"]
@@ -417,7 +418,7 @@ if (cfg.seedPrompt !== false) seedInject(home)                      // 落盘默
 if (!isFile(statePath(home))) writeState(home, { enabled: cfg.enabled !== false })  // 状态默认开启
 ```
 
-也就是：`~/.dsh/prompt-inject.md` 自动写好（约 26 KB，包内那份 25240 B 会拼上题材分类扩展），
+也就是：`~/.dsh/prompt-inject.md` 自动写好（包内默认正文 24.6 KB = 25240 字节，拼上题材分类扩展后约 26 KB），
 状态文件里 `enabled: true`，系统提示里立刻开始丢官方身份段。
 
 **装完重启引擎就完事了。** 下面这 5 个工具是「管理入口」，用来查状态、换正文、关掉再打开，
@@ -596,7 +597,9 @@ dsh-purge 的选择是把 fail-closed 改成 fail-open——审批环节整个�
 | id | 名字 | 改什么 |
 |---|---|---|
 | 5 / 8 / 9 / 10 / 11 | `APPROVAL_*` | 「要审批就自动拒绝」→ 自动放行 |
-| 6 / 7 / 15 | `SANDBOX_*` | `deny file-write*` → `allow` |
+| 6 | `SANDBOX_DENY_FILE_WRITE` | `(deny file-write*)` → `(allow file-write*)` |
+| 7 | `SANDBOX_MODE_DEFAULT` | 沙箱 mode 默认值从 `workspace-write` 抬到 `danger-full-access` |
+| 15 | `SANDBOX_CONFINE_PASSTHROUGH` | `confine(argv, policy)` 整段直接返回，不再拦 |
 | 25 | `HARNESS_IDENTITY_STRIP` | `includeHarnessIdentity` 默认 false |
 | 55 / 66 / 67 / 68 / 72 | 装配守卫、消息守卫（名字不全是 `SYSTEM_PROMPT_*` 前缀） |
 | 58 / 75 | `REWIND_*` | 回退空标记不进模型请求、回退重置未完成任务 |
@@ -692,9 +695,10 @@ Electron、asar、Windows 控制台那套在 Android 上没有落点——详见
 
 1. **只对新会话完全生效**。引擎把系统提示写进对话历史（`systemPromptUpdate: "in-history"`），
   旧会话里那条旧 system 还在，注入顶不动它。
-2. **压缩会重发基线**。上下文压缩之后官方弱句可能把强开场顶回去，建议同时把
-  `dsh-agent-instructions` 的 `REPLACEMENT_*` / `COMPACT_*` 常量一起换掉。
-3. **补丁改的是 `node_modules`**。**升级引擎、或者装新版 App，都会把它整个重装一遍、补丁全丢**——App 的更新流程会重新铺 `@deepseek-ai/*`，跟你有没有动过它无关。之后要重跑 `probe` + `apply`（见 §16）。
+2. **压缩会重发基线**。上下文压缩之后，引擎会用 `COMPACT_AGENT_INSTRUCTIONS_INTRO` 那句弱提示顶掉强开场。
+  想补的话**只改这一个常量**（它在 `dsh-agent-instructions` 里，目前没有补丁覆盖）。
+  **别去动 `REPLACEMENT_*`**——#2 补丁正把它们往「温和说法」的方向改，你再手动改强会和补丁互相覆盖。
+3. **补丁改的是 `node_modules`**。**升级引擎、或者装新版 App，都会把它整个重装一遍、补丁全丢**——App 的更新流程会重新铺 `@deepseek-ai/*`，跟你有没有动过它无关。之后要重跑 `probe` + `apply`（见 [16. 升级引擎](#16-升级引擎--更新-app-之后)）。
 4. **`node --check` 只验语法不验语义**——保证不把文件改坏，保证不了行为对。
 
 ### 12.1 换用别的模型（API）会怎样
@@ -745,7 +749,7 @@ Electron、asar、Windows 控制台那套在 Android 上没有落点——详见
 | 运行时依赖 | 零。插件本身只用 Node 内置模块 |
 | 体积 | 35 个文件 / 530 KB |
 
-**引擎版本边界**：`package.json` 里写的是 `engines.dsh: ">=0.2.1-rc.2 <0.3.0"`。
+**引擎版本边界**：`package.json` 里写的是 `engines.dsh: ">=0.2.1-rc.2 <0.3.0-0"`（`-0` 表示排除 0.3.x 的预发布版）。
 引擎升到 0.3.x 之后 `dsh plugin add` 会**直接拒绝安装**：
 
 ```
@@ -940,7 +944,7 @@ am force-stop io.github.ccch1mneyyy.dsh_app
 
 **两种情况都会让补丁失效**：
 
-- **升级引擎**：自己跑 `npm install`、或按 §15 还原
+- **升级引擎**：自己跑 `npm install`、或按 [15. 还原引擎](#15-还原引擎备份还在--备份没了) 还原
 - **更新 App**：从 GitHub 装新版 APK。App 启动时会重新铺一遍 `/opt/dsh/node_modules/@deepseek-ai/`，实测 331 个包的时间戳全部刷新、补丁一条不剩。**这一点最容易被忽略**——你什么都没干，只是装了个新版 App，破甲就剩一半了。
 
 **怎么知道自己中招了**：点输入框上方的「破甲状态」胶囊，顶部出现红字
@@ -1081,11 +1085,11 @@ VPS 地址（技能里还是 `<你的VPS_IP>` 占位符）、`toolkit/` 下的 `
 **文件**
 
 ```
-lib/              注入层 14 个模块（来自 LanJinGod）
+lib/              注入层与原生界面 15 个模块（早期 9 个来自 LanJinGod，其余是本仓库加的）
 assets/           categories.json / default-prompt.md
 patches/          patches.json（86 条）
-  purge-patch.mjs   CLI 壳（66 行，只做参数解析与输出）
-  lib/core.mjs      纯函数库（580 行：probe / apply / restore / isDone / verifyFile）
+  purge-patch.mjs   CLI 壳（91 行，只做参数解析与输出）
+  lib/core.mjs      纯函数库（677 行：probe / apply / restore / isDone / verifyFile）
 scripts/          engine-smoke.mjs（段注册与 assemble 重排验证）· kit-check.mjs（插件规范检查，需外部 plugin-kit）
 test/             7 组共 62 项测试
 cordis.patch.yml  插件插入声明
@@ -1148,7 +1152,7 @@ README.md         本文
 
 ### 0.4.9
 - README 重排：安装提到第 2 章、打补丁提到第 3 章，想装的人不用再读 335 行理论。
-- 压缩三节（定位 123→24 行、刻意不做 69→46 行、红队 101→66 行），1240 → 1067 行。
+- 压缩三节（定位 123→24 行、刻意不做 69→46 行、红队 101→66 行），当时压到 1067 行（现在又长回来了，见文件实际行数）。
 - 修 12 处过时数据：补丁数 87→86、包名 dsh-purge-go→dsh-go-purge（5 条命令原本跑不通）、体积与行数、3.1 实测表。
 
 ### 0.4.8
