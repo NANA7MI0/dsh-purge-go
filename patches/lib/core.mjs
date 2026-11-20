@@ -282,8 +282,35 @@ export function engineVersion(root) {
 }
 
 /** 备份要记的引擎身份：版本 + 真实 root。 */
+/**
+ * App 版本：从本机诊断快照里读。
+ *
+ * 为什么从那儿读：`/opt/dsh-app` 下没有 package.json，`relay.cjs` 里也没有版本字符串，
+ * 唯一写着 App 版本号的地方就是 App 自己生成的 `$DSH_HOME/dsh-app/diagnostics.md`：
+ *
+ *   - App：1.2.0+11181211 · 1.2.0 · 11181211
+ *
+ * 三段分别是 versionName+versionCode 拼接、versionName、versionCode。取中间那段。
+ * 读不到就返回 null——备份里记为 null，还原时不拿它做判断（只警告）。
+ */
+export function appVersion() {
+  try {
+    const home = process.env.DSH_HOME || path.join(process.env.HOME || '/root', '.dsh')
+    const txt = fs.readFileSync(path.join(home, 'dsh-app', 'diagnostics.md'), 'utf8')
+    const m = txt.match(/^- App[：:]\s*(.+)$/m)
+    if (!m) return null
+    const parts = m[1].split('·').map((s) => s.trim()).filter(Boolean)
+    return parts[1] || parts[0] || null
+  } catch {
+    return null
+  }
+}
+
+/** 插件当前适配的引擎版本。加新的就在这儿加一行，README 那张表跟着改。 */
+export const SUPPORTED_ENGINES = ['0.2.2-rc.1']
+
 export function engineInfo(root) {
-  return { version: engineVersion(root) };
+  return { version: engineVersion(root), app: appVersion() };
 }
 export function sha256(file) {
   try {
@@ -406,13 +433,38 @@ export function apply(root, opts = {}) {
   // 记下引擎版本：还原时要用它判断「这份备份是不是当前这版引擎的」。
   // 没有它的话，App 更新后如果不重打补丁就直接点还原，会把旧版引擎的原始文件
   // 写进新版引擎里——版本对不上，轻则补丁失效，重则引擎起不来。
-  const manifest = { root, at: new Date().toISOString(), engine: engineInfo(root), files: [] };
-  for (const file of byFile.keys()) {
+  // 复用已有备份时保留原来的 at：那个时间是「第一次打补丁之前」，还原靠它判断先后。
+  // 重写 at 会让这份备份看起来像是刚建的，语义就丢了。
+  let prevManifest = null
+  if (opts.keepManifestAt && !dry) {
+    try { prevManifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8')) } catch { /* 没有就按新的写 */ }
+  }
+  const manifest = prevManifest
+    ? { ...prevManifest, files: prevManifest.files || [] }
+    : { root, at: new Date().toISOString(), engine: engineInfo(root), files: [] }
+  // 备份范围：**所有补丁的候选文件**，不只是这次动到的。
+  //
+  // 为什么：还原时用的是「最早那份备份」。如果它只覆盖第一次 apply 动到的 41 个文件，
+  // 后来新增的补丁（比如 #56/#77 改的 dsh-client-ui-conversation/lib/client.js）
+  // 就没东西可还原——用户点还原、看到「已还原 41 个文件」，client.js 的改动却还在。
+  // 每份都全量备份之后，任意一份单独拿出来都能还原干净。
+  const backupTargets = new Set(byFile.keys());
+  for (const r of rows) {
+    for (const f of r.files || []) {
+      try { if (fs.existsSync(f) && fs.statSync(f).isFile()) backupTargets.add(f) } catch { /* 读不到就跳过 */ }
+    }
+  }
+  for (const file of backupTargets) {
     const rel = path.relative(root, file);
-    if (!dry) {
-      const dst = path.join(dir, "files", rel);
-      fs.mkdirSync(path.dirname(dst), { recursive: true });
-      fs.copyFileSync(file, dst);
+    if (dry) continue;
+    const dst = path.join(dir, "files", rel);
+    // 复用备份时，这份备份里已经有的文件**不能覆盖**。
+    // 它存的是「打补丁之前」的原样，而现在磁盘上那份已经打过了——照抄一遍就把
+    // 原始状态弄丢，之后点还原等于什么都没撤。这是复用方案最容易踩的坑。
+    if (prevManifest && fs.existsSync(dst)) continue;
+    fs.mkdirSync(path.dirname(dst), { recursive: true });
+    fs.copyFileSync(file, dst);
+    if (!manifest.files.some((f) => f.rel === rel)) {
       manifest.files.push({ rel, size: fs.statSync(dst).size, sha256: sha256(dst) });
     }
   }
@@ -608,21 +660,50 @@ export function restore(backupDir, opts = {}) {
   // 备份没记版本（旧备份）时只警告不拦，否则老用户全被卡死。
   const currentVersion = engineVersion(root);
   const backupVersion = manifest?.engine?.version ?? null;
+  const currentApp = appVersion();
+  const backupApp = manifest?.engine?.app ?? null;
+  // 三层判断，从「不要紧」到「有风险」：
+  //
+  //   ① App 版本变了、引擎版本没变 → 引擎文件本身没换，只是 App 外壳更新了。
+  //      备份里的原始文件仍然是这版引擎的原始文件，还原本身没风险；
+  //      但按设计「备份必须是当前状态的原始版」，所以还是提示重建一次。
+  //   ② 引擎版本变了、但新版在 SUPPORTED_ENGINES 里 → 我们已经适配过，重新打补丁即可。
+  //   ③ 引擎版本变了、且没适配过 → 拒绝还原，并明确告诉用户：这时候点一键注入可能把引擎弄崩。
+  const appMismatch = Boolean(backupApp && currentApp && backupApp !== currentApp);
   const engineMismatch = Boolean(backupVersion && currentVersion && backupVersion !== currentVersion);
-  if (engineMismatch) {
+  const engineSupported = engineMismatch && SUPPORTED_ENGINES.includes(currentVersion);
+  if (engineMismatch && !engineSupported) {
+    // ③ 没适配过这个引擎：拒绝，并且说清风险。
+    // 这时候让用户去点「一键注入」是危险的——补丁按旧版代码写，打到新版上可能把引擎弄崩。
     errors.push({
-      error: `备份来自引擎 ${backupVersion}，当前是 ${currentVersion}。这份备份不能用来还原——` +
-        "先点「一键注入」重打一次，会生成当前版本的备份。",
+      error: `备份来自引擎 ${backupVersion}，当前引擎是 ${currentVersion}，这个版本本插件还没适配。` +
+        "现在不能还原，也先别点「一键注入」——补丁是照旧版代码写的，打到新版引擎上有可能让它起不来。" +
+        "等插件发新版适配之后再动，或者先按 README 15 章把引擎包重装回原版。",
+      kind: 'engine_unsupported',
+    });
+  } else if (engineMismatch && engineSupported) {
+    // ② 引擎变了但我们适配过：可以放心重打。
+    errors.push({
+      error: `备份来自引擎 ${backupVersion}，当前是 ${currentVersion}。这个版本已经适配，` +
+        "点「一键注入」重打一次就会生成当前版本的备份。",
+      kind: 'engine_supported',
+    });
+  } else if (appMismatch) {
+    // ① 只有 App 变了：引擎文件没换，按设计还是提示重建一次。
+    errors.push({
+      error: `备份是在 App ${backupApp} 上打的，现在是 ${currentApp}。引擎本身没变，` +
+        "但备份要和当前状态对齐——点「一键注入」重打一次即可。",
+      kind: 'app_changed',
     });
   } else if (backupVersion === null && manifest !== null) {
     warnings.push("这份备份是很早以前打的，没记引擎版本，无法确认是否匹配");
   }
-  // 版本不匹配时必须立刻返回——不能记一条错就接着写文件，
-  // 那等于明知会写坏还照写一遍。
-  if (engineMismatch) {
-    logs.push("REFUSED: engine version mismatch");
-    return { restored: 0, files, logs, errors, warnings, root, rootMismatch, hasManifest: true, engineMismatch: true, backupVersion, currentVersion };
+  // 版本不匹配时必须立刻返回——不能记一条错就接着写文件，那等于明知会写坏还照写一遍。
+  if (engineMismatch || appMismatch) {
+    logs.push("REFUSED: version mismatch");
+    return { restored: 0, files, logs, errors, warnings, root, rootMismatch, hasManifest: true, engineMismatch, appMismatch, backupVersion, currentVersion, backupApp, currentApp };
   }
+
 
   let n = 0;
   const restoreOne = (rel) => {
