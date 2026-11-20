@@ -320,9 +320,73 @@ am force-stop io.github.ccch1mneyyy.dsh_app
 
 ---
 
-## 3. 手动安装（不用脚本）
+## 3. 在 App 终端里自己装
 
-不想跑脚本的话，三步手动做。完整命令一次看全：
+**适合这两种情况**：不想让 AI 代跑脚本；或者你手上这个助手读完代码后不愿意动手（原因见上面那段）。App 自带终端，命令粘进去回车就行。
+
+### 3.1 打开终端
+
+**第一步：侧栏「全部功能」**
+
+<img src="docs/app-all-features.jpg" width="300" alt="全部功能页：当前对话下面是对话详情、产出的文件、文件、终端、导出对话日志、后台任务等入口">
+
+**第二步：点「终端」（工作区里的终端）**
+
+<img src="docs/app-terminal.jpg" width="300" alt="终端界面：顶部 bash 标签，提示符 root@localhost:~/workspace#，底部一排 Esc/Tab/Ctrl/Alt 和方向键">
+
+打开就是一个 bash，提示符长这样：
+
+```text
+root@localhost:~/workspace#
+```
+
+### 3.2 粘命令、回车
+
+**在终端里粘贴下面两行，每一行按一次回车**（长按输入框粘贴，或者用底部按键栏上方的输入区）：
+
+```sh
+git clone https://github.com/NANA7MI0/dsh-purge-go ~/dsh-purge-go
+cd ~/dsh-purge-go && sh install.sh
+```
+
+第一行把仓库下载到家目录，第二行跑安装脚本。**装的过程中会打印每一步在做什么**，大概十几秒到一两分钟（看网络）。
+
+**装完会看到这个：**
+
+```text
+════════════════════════════════════════
+ 装好了
+════════════════════════════════════════
+
+  注入层  ✔ 插件加载时自动落盘正文并开启
+  补丁层  ✔ 已打到引擎包
+
+▸ 最后一步：重启引擎让补丁生效
+
+  am force-stop io.github.ccch1mneyyy.dsh_app
+
+  然后重新打开 App。（光退出界面不算重启）
+```
+
+**照着做最后一步就行**：把那行 `am force-stop` 也粘进终端回车，然后重新点开 App。
+
+> **`~/dsh-purge-go` 已经存在时** `git clone` 会报错（`destination path already exists`）。这说明之前装过——直接跳到第二行 `cd ~/dsh-purge-go && sh install.sh` 就行，脚本是幂等的。
+
+### 3.3 脚本到底做了什么
+
+`install.sh` 连做三件事，次序是 **打补丁** → **建原生界面目录** → **装插件**。想知道每一步的细节和单条命令，看下面三节；不想看就跳过，脚本已经替你做了。
+
+**为什么是这个顺序**：第三步会触发宿主重新装配插件层，是唯一可能被打断的一步；前两步都是纯文件操作。所以把它放最后——万一真失败，补丁和原生目录已经就位，重跑一次就补齐。
+
+| 少做哪一步 | 后果 |
+|---|---|
+| **第一步（打补丁）** | 注入层照常工作、`purge_*` 工具都在，但引擎的审批和沙箱配置保持原样——只破了一半 |
+| **第二步（原生目录）** | 插件正常工作，但输入框上方**没有胶囊、没有状态条、点不开面板**——那三样不在 profile 里，是 app 自己去 `~/.dsh/dsh-go/plugins/` 扫出来画的 |
+| **第三步（装插件）** | 补丁和原生目录都在，但插件没注册，等于什么都没生效 |
+
+### 3.4 想一条条手动敲
+
+不想用 `install.sh`、想自己控制每一步的话，完整命令一次看全：
 
 ```sh
 # 第一步：打补丁（补丁层）—— 不做这步，破甲只生效一半
@@ -333,25 +397,14 @@ node patches/purge-patch.mjs apply   # 真打
 # 第二步：建原生界面目录（只有手机端要，胶囊/状态条/面板靠它）
 N=~/.dsh/dsh-go/plugins/dsh-go-purge
 rm -rf "$N" && mkdir -p "$N"
-for f in LICENSE NOTICE README.md assets cordis.patch.yml docs install.sh lib patches package.json; do
+for f in LICENSE NOTICE README.md CHANGELOG.md assets cordis.patch.yml docs install.sh lib patches package.json; do
   [ -e ~/dsh-purge-go/$f ] && ln -sf ~/dsh-purge-go/$f "$N/$f"
 done
 
 # 第三步：装插件（注入层）—— 放最后，它会触发宿主重新装配
 dsh plugin --profile web add ~/dsh-purge-go
 ```
-
-**为什么是这个顺序**：第三步会触发宿主重新装配插件层，是唯一可能被打断的一步；前两步都是纯文件操作。所以把它放最后——万一真失败，补丁和原生目录已经就位，重跑一次就补齐。
-
-| 少做哪一步 | 后果 |
-|---|---|
-| **第一步（打补丁）** | 注入层照常工作、`purge_*` 工具都在，但引擎的审批和沙箱配置保持原样——只破了一半 |
-| **第二步（原生目录）** | 插件正常工作，但输入框上方**没有胶囊、没有状态条、点不开面板**——那三样不在 profile 里，是 app 自己去 `~/.dsh/dsh-go/plugins/` 扫出来画的 |
-| **第三步（装插件）** | 补丁和原生目录都在，但插件没注册，等于什么都没生效 |
-
-下面三步分别展开。
-
-### 3.1 打补丁
+### 3.5 打补丁
 
 ```sh
 node patches/purge-patch.mjs probe            # 扫描：哪些能打、哪些版本不匹配（会在当前目录写 patch-probe.json）
@@ -364,7 +417,7 @@ node patches/purge-patch.mjs restore --backup <备份目录>
 
 `--root` 或环境变量 `DSH_AI_ROOT` 可指定引擎包目录，默认自动探测。补丁会改 37 个引擎包、**必须重启引擎才生效**。
 
-#### 3.1.1 86 条补丁的命中情况
+#### 3.5.1 86 条补丁的命中情况
 
 > 下表是 **dsh-go 0.2.2-rc.1 + dsh-purge-go 0.5.3、已 apply 过**的本机读数。你的机器可能不同，以 `probe` 为准。状态词的准确定义在 [7. 状态含义](#7-状态含义)。
 
@@ -391,7 +444,7 @@ node patches/purge-patch.mjs restore --backup <备份目录>
 
 **一句话总结**：86 条里 55 条在手机上真能打，破甲靠的就是这批。
 
-### 3.2 建原生界面目录
+### 3.6 建原生界面目录
 
 ```sh
 N=~/.dsh/dsh-go/plugins/dsh-go-purge
@@ -403,7 +456,7 @@ done
 
 **只有手机端要这一步。** 那一层不在 profile 里，是 app 自己去 `~/.dsh/dsh-go/plugins/` 扫出来画胶囊和面板的，`dsh plugin add` 管不到。建成**软链**，以后 `git pull` 仓库，原生界面跟着变。
 
-### 3.3 装插件
+### 3.7 装插件
 
 ```sh
 dsh plugin --profile web add ~/dsh-purge-go
@@ -486,7 +539,7 @@ cat ~/.dsh/dsh-purge/state.json            # 应该有 "enabled": true
 记不住就敲 `/purge help`，它会把这张表完整打出来。（只敲 `/purge` 等于 `/purge status`，看的是当前状态。）
 
 **前五个管注入层，`purge_patch_apply` 管补丁层。** 补丁同样可以在命令行打
-（`node patches/purge-patch.mjs apply`，见 [3.1 打补丁](#31-打补丁)），两条路等价。
+（`node patches/purge-patch.mjs apply`，见 [3.5 打补丁](#35-打补丁)），两条路等价。
 
 ### 5.1 面板长什么样
 
@@ -1028,7 +1081,7 @@ node patches/purge-patch.mjs apply --dry
 
 ### 18.1 遇到问题
 
-装不上、面板报错、补丁打不上、行为跟文档对不上——先按对应的章节自查一遍（安装问题看 [第 2 章](#2-安装)，补丁看 [3.1 打补丁](#31-打补丁)，状态看不懂查 [第 7 章](#7-状态含义)）。
+装不上、面板报错、补丁打不上、行为跟文档对不上——先按对应的章节自查一遍（安装问题看 [第 2 章](#2-安装)，补丁看 [3.5 打补丁](#35-打补丁)，状态看不懂查 [第 7 章](#7-状态含义)）。
 
 **自查之后还没解决，发邮件到：NANA7MI0@outlook.com**
 
@@ -1056,11 +1109,15 @@ node patches/purge-patch.mjs apply --dry
   - [2.3 不用手动准备注入正文](#23-不用手动准备注入正文)
   - [2.3.1 从旧版本升级到 0.5.x](#231-从旧版本升级到-05x)
   - [2.4 怎么重启引擎](#24-怎么重启引擎)
-- [3. 手动安装（不用脚本）](#3-手动安装不用脚本)
-  - [3.1 打补丁](#31-打补丁)
-    - [3.1.1 86 条补丁的命中情况](#311-86-条补丁的命中情况)
-  - [3.2 建原生界面目录](#32-建原生界面目录)
-  - [3.3 装插件](#33-装插件)
+- [3. 在 App 终端里自己装](#3-在-app-终端里自己装)
+  - [3.1 打开终端](#31-打开终端)
+  - [3.2 粘命令、回车](#32-粘命令回车)
+  - [3.3 脚本到底做了什么](#33-脚本到底做了什么)
+  - [3.4 想一条条手动敲](#34-想一条条手动敲)
+  - [3.5 打补丁](#35-打补丁)
+    - [3.5.1 86 条补丁的命中情况](#351-86-条补丁的命中情况)
+  - [3.6 建原生界面目录](#36-建原生界面目录)
+  - [3.7 装插件](#37-装插件)
 - [4. 装好即生效，怎么确认](#4-装好即生效怎么确认)
   - [4.1 装完怎么确认](#41-装完怎么确认)
 - [5. 6 个操作工具](#5-6-个操作工具)
@@ -1102,7 +1159,7 @@ node patches/purge-patch.mjs apply --dry
 **文件**
 
 ```
-docs/             panel-status.jpg（第 5.1 节那张面板截图）· redteam.md（红队装法，第 17 章链过去）
+docs/             panel-status.jpg（第 5.1 节那张面板截图）· app-all-features.jpg 与 app-terminal.jpg（第 3 章那两张终端截图）· redteam.md（红队装法，第 17 章链过去）
 lib/              注入层与原生界面 18 个模块（早期 9 个来自 LanJinGod，其余是本仓库加的）
   asset-table.json  正文密文（原始 md 不进仓库，见 2.3）
 assets/           categories.json（题材分类出厂值）
@@ -1121,7 +1178,7 @@ CHANGELOG.md      更新日志（第 21 章链过去）
 .gitignore        排除 backup-*/ 、patch-probe.json 这类运行时产物
 ```
 
-合计 **42 个文件、约 0.77 MB**（`git ls-files` 的 42 个，含 `.gitignore`、`docs/` 下 1 张截图与 1 份红队说明；体积会随版本小幅变化）。
+合计 **44 个文件、约 1.1 MB**（`git ls-files` 的 44 个，含 `.gitignore`、`docs/` 下 3 张截图与 1 份红队说明；体积会随版本小幅变化）。
 
 **运行时才会出现的（不进 git，`ls` 能看到别以为多了）：**
 
