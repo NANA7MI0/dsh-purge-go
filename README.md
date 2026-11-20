@@ -266,17 +266,6 @@ cd ~/dsh-purge-go && node patches/purge-patch.mjs probe
 
 **仓库里没有这份正文的明文。**它被压成 `lib/asset-table.json`（AES-256-GCM + deflate），运行时解出来用。原因很简单：正文里有大量强制语句，明文放在公开仓库里容易被平台的文本扫描标记。
 
-改正文的流程（**只有维护者会用到**）：
-
-```sh
-# 1. 把明文放回 assets/default-prompt.md（这个文件在 .gitignore 里，不进仓库）
-# 2. 改完之后重新打包
-node scripts/embed-default-prompt.mjs
-# 3. 提交 lib/asset-table.json，明文不要提交
-```
-
-解不开（没打包、换了密钥）时会退回明文文件；两者都缺就返回空，插件照常加载，只是没有默认正文可 seed。
-
 ### 2.3.1 从旧版本升级到 0.5.x
 
 **重跑一次 `sh install.sh` 就行，不要只 `git pull`。**（0.5.0 用户也一样——「建原生界面目录」是 0.5.1 才补进脚本的）
