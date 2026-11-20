@@ -65,8 +65,8 @@ cd "$HERE" || die "进不去 $HERE"
 if [ "$MODE" = "plugin" ]; then
   say "▸ 已跳过补丁层（--plugin-only）"
   say ""
-  say "  ⚠ 只会装插件，引擎的审批与沙箱限制还在。"
-  say "    想补上补丁，随时跑：cd $HERE && sh install.sh"
+  say "  本次只装插件：审批与沙箱两个配置项保持原样。"
+  say "    想补上：cd $HERE && sh install.sh"
   say ""
 else
   if [ "$DRY" = "1" ]; then
@@ -192,7 +192,7 @@ say "  注入层  ✔ 插件加载时自动落盘正文并开启"
 # --plugin-only 时补丁那步是跳过的，别在收尾说「已打到引擎包」
 if [ "$MODE" = "plugin" ]; then
   say "  补丁层  ✖ 没打（本次用了 --plugin-only）"
-  say "           审批和沙箱限制还在，想补上就跑：cd $HERE && sh install.sh"
+  say "           想补上就跑：cd $HERE && sh install.sh"
 else
   say "  补丁层  ✔ 已打到引擎包"
 fi
