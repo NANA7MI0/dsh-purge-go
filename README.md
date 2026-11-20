@@ -364,7 +364,11 @@ git clone https://github.com/NANA7MI0/dsh-purge-go ~/dsh-purge-go && cd ~/dsh-pu
 
   注入层  ✔ 插件加载时自动落盘正文并开启
   补丁层  ✔ 已打到引擎包
+
+▸ 最后一步：重启引擎让补丁生效
 ```
+
+脚本会在这里停下，后面接着教你怎么重启。
 
 **第 2 条：重启**
 
