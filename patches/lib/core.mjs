@@ -439,8 +439,11 @@ export function apply(root, opts = {}) {
   if (opts.keepManifestAt && !dry) {
     try { prevManifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8')) } catch { /* 没有就按新的写 */ }
   }
+  // 复用分支只保留 at（「第一次打补丁之前」那个时间），engine 里的版本和 App 版本要按当前刷成新的。
+  // 不刷的话：App 从 1.2.0 升到 1.2.1 → 还原被 app_changed 拒绝 → 提示点一键注入 → 复用备份 →
+  // engine.app 仍是 1.2.0 → 再点还原还是被拒，永远出不来。
   const manifest = prevManifest
-    ? { ...prevManifest, files: prevManifest.files || [] }
+    ? { ...prevManifest, engine: { ...engineInfo(root), app: appVersion() }, files: prevManifest.files || [] }
     : { root, at: new Date().toISOString(), engine: engineInfo(root), files: [] }
   // 备份范围：**所有补丁的候选文件**，不只是这次动到的。
   //
@@ -454,19 +457,39 @@ export function apply(root, opts = {}) {
       try { if (fs.existsSync(f) && fs.statSync(f).isFile()) backupTargets.add(f) } catch { /* 读不到就跳过 */ }
     }
   }
+  // 复用备份时，缺哪些文件要区别对待：
+  //
+  //   · 备份里已经有 → 跳过（它存的是打补丁前的原样，磁盘上那份已经打过了，照抄会污染）；
+  //   · 备份里没有 → 只有当磁盘上这份**还是干净的**才能补进去。
+  //     如果磁盘上这份已经带 [dsh-purge] 标记，说明备份不完整（早先 apply 只备份了
+  //     「这次动到的文件」，后来补丁的目标变多了），补进去的就是脏内容——
+  //     而且 manifest 的 sha256 记的正是这份脏内容，还原时校验还会通过。
+  //     这种情况必须拒绝复用，让上层提示用户先重装引擎包。
+  const dirtyMissed = [];
   for (const file of backupTargets) {
     const rel = path.relative(root, file);
     if (dry) continue;
     const dst = path.join(dir, "files", rel);
-    // 复用备份时，这份备份里已经有的文件**不能覆盖**。
-    // 它存的是「打补丁之前」的原样，而现在磁盘上那份已经打过了——照抄一遍就把
-    // 原始状态弄丢，之后点还原等于什么都没撤。这是复用方案最容易踩的坑。
     if (prevManifest && fs.existsSync(dst)) continue;
+    if (prevManifest) {
+      let cur = "";
+      try { cur = fs.readFileSync(file, "utf8"); } catch { /* 读不到就当干净 */ }
+      if (cur.includes("[dsh-purge]")) { dirtyMissed.push(rel); continue; }
+    }
     fs.mkdirSync(path.dirname(dst), { recursive: true });
     fs.copyFileSync(file, dst);
     if (!manifest.files.some((f) => f.rel === rel)) {
       manifest.files.push({ rel, size: fs.statSync(dst).size, sha256: sha256(dst) });
     }
+  }
+  if (dirtyMissed.length) {
+    return {
+      backupDir: null, applied: 0, failed: 0, files: [], logs,
+      errors: [{
+        error: `备份不完整：它还缺 ${dirtyMissed.length} 个目标文件（如 ${dirtyMissed[0]}），而这些文件现在已经被打过补丁。继续复用会把脏内容存成原始状态。先按 README 15.2 重装引擎包，再点一键注入。`,
+      }],
+      rolledBack: false, rollbackFailed: false, rollbackMissed: [],
+    };
   }
   if (!dry) {
     fs.writeFileSync(path.join(dir, "manifest.json"), JSON.stringify(manifest, null, 1));
@@ -639,10 +662,18 @@ export function restore(backupDir, opts = {}) {
   // 优先按 manifest 走：它能告诉我们「该有哪些文件」「原来挂在哪个 root」「哈希对不对」
   const manifestPath = path.join(backupDir, "manifest.json");
   let manifest = null;
+  let manifestBroken = false;
   try {
     if (fs.existsSync(manifestPath)) manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
   } catch (error) {
+    manifestBroken = true;
     errors.push({ error: "manifest 读取失败：" + (error?.message || String(error)) });
+  }
+  // manifest 存在但解析不了，和「老备份本来没有 manifest」是两回事：
+  // 前者说明这份备份自己坏了，继续走无校验路径会把 41 个引擎文件覆盖掉再报失败、且不回滚。
+  // 直接拒绝，让用户换一份备份或重装引擎。
+  if (manifestBroken) {
+    return { restored: 0, files: [], logs: ["REFUSED: manifest unreadable"], errors, warnings: [], root: opts.root || detectRoot(), rootMismatch: false, hasManifest: true, engineMismatch: false, appMismatch: false, backupVersion: null, currentVersion: null, backupApp: null, currentApp: null };
   }
 
   const root = opts.root || manifest?.root || detectRoot();
