@@ -693,7 +693,7 @@ configured answerers; without an available answerer, the request fails closed.
 |---|---|---|
 | 目标 | PC 上的 DSH | dsh-go |
 | 注入方式 | 自带 `core.js`（177 KB，补丁表已拆去 `lib/patches/`），逐句改写系统提示 | 在装配环节整段替换 |
-| 规模 | 518 文件 / 305 个 js+mjs / 4.83 MB | **39 文件 / 约 0.71 MB**（代码 4,721 行） |
+| 规模 | 518 文件 / 305 个 js+mjs / 4.83 MB | **44 文件 / 约 1.1 MB**（代码 4,721 行） |
 | 补丁 | 自带（`lib/patches/` 拆成 6 个模块，83 条） | 导成 `patches.json`（86 条）+ 独立执行器 |
 | 桌面功能 | asar 解包、计划任务 | 无（模块级清单见 [第 10 章](#10-定位只保留破甲桌面版其余功能全部放弃)） |
 | 面板 | `packages/purge-panel/` 独立 Web 面板 | 无（试过移植，放弃；理由见 [11.1](#111-不移植原版的-web-控制面板)） |
@@ -830,7 +830,7 @@ Electron、asar、Windows 控制台那套在 Android 上没有落点——详见
 | Node | 20+（用到 `node --check` 和 ESM） |
 | **包管理器** | **pnpm**（`dsh plugin` 底层就是调 pnpm，缺了会报 `dsh: pnpm was not found`） |
 | 运行时依赖 | 零。插件本身只用 Node 内置模块 |
-| 体积 | 39 个文件 / 约 0.71 MB（含 1 张截图 153 KB、1 份红队说明） |
+| 体积 | 44 个文件 / 约 1.1 MB（含 3 张截图、1 份红队说明） |
 
 **引擎版本边界**：`package.json` 里写的是 `engines.dsh: ">=0.2.1-rc.2 <0.3.0-0"`（`-0` 表示排除 0.3.x 的预发布版）。
 引擎升到 0.3.x 之后 `dsh plugin add` 会**直接拒绝安装**：
