@@ -713,16 +713,18 @@ node patches/purge-patch.mjs restore    # 还原补丁
 
 **下面这张表里的名字是 `patches.json` 里的原始命名，照录以便逐条核对。**名字描述的是每条补丁改的配置项，不是本文档对使用者的建议——完整 86 条见 `patches/patches.json`。最要紧的几条：
 
-| id | 名字 | 改什么 |
-|---|---|---|
-| 5 / 8 / 9 / 10 / 11 | `APPROVAL_NEVER_SENTENCE` / `APPROVAL_POLICY_DEFAULT` / `APPROVAL_AUTO_GRANT` / `APPROVAL_CONFIG_DEFAULT_NEVER` / `APPROVAL_NEVER_SENTENCE_BYPASS` | 「要审批就自动拒绝」→ 自动放行 |
-| 6 | `SANDBOX_DENY_FILE_WRITE` | `(deny file-write*)` → `(allow file-write*)` |
-| 7 | `SANDBOX_MODE_DEFAULT` | 沙箱 mode 默认值从 `workspace-write` 抬到 `danger-full-access` |
-| 15 | `SANDBOX_CONFINE_PASSTHROUGH` | `confine(argv, policy)` 整段直接返回，不再拦 |
-| 25 | `HARNESS_IDENTITY_STRIP` | `includeHarnessIdentity` 默认 false |
-| 55 / 66 / 67 / 68 / 72 | `SYSTEM_PROMPT_REPLACE_HEAD` / `SYSTEM_PROMPT_RENDER_GUARD` / `AGENT_LOOP_MESSAGES_GUARD` / `SYSTEM_NODES_CONTENT_GUARD` / `MESSAGES_SYSTEM_CURRENT`——装配与消息守卫，名字不全是 `SYSTEM_PROMPT_*` 前缀 |
-| 58 / 75 | `REWIND_SKIP_DERIVE` / `REWIND_RESET_TODOS` | 回退空标记不进模型请求、回退重置未完成任务 |
-| 87 | `HUNG_PROMPT_LF_NEEDLE` | 空白宿主的挂载比对改用 LF，避免 CRLF 误判（**不是 REWIND**） |
+**先说一句结论，再看表：手机上真正会执行到的，只有审批那一组。沙箱那几条改的是 macOS 的规则语法（SBPL），Android proot 里根本没有执行后端——它们在手机上等于没生效，只是把给模型看的那句话从 read-only 改成了允许。详见 [1.1 沙箱](#11-沙箱手机上和桌面上不是一回事)。**
+
+| id | 名字 | 改的是什么 | 手机上实际影响 |
+|---|---|---|---|
+| 5 / 8 / 9 / 10 / 11 | `APPROVAL_NEVER_SENTENCE` / `APPROVAL_POLICY_DEFAULT` / `APPROVAL_AUTO_GRANT` / `APPROVAL_CONFIG_DEFAULT_NEVER` / `APPROVAL_NEVER_SENTENCE_BYPASS` | 审批策略默认值 `ask` → `never`，两处提示文案改成 `auto-granted` | **生效**：需要审批的操作改为直接执行（原因见 [第 6 章](#6-它为什么能减少摩擦)） |
+| 6 | `SANDBOX_DENY_FILE_WRITE` | SBPL 规则 `(deny file-write*)` → `(allow file-write*)` | 规则不执行；只改模型看到的那句话 |
+| 7 | `SANDBOX_MODE_DEFAULT` | 沙箱 mode 默认值 `workspace-write` → `danger-full-access` | 同上，Android 上没有可用的沙箱后端 |
+| 15 | `SANDBOX_CONFINE_PASSTHROUGH` | `confine(argv, policy)` 直接返回 | 同上，手机上这个函数没有调用点 |
+| 25 | `HARNESS_IDENTITY_STRIP` | `includeHarnessIdentity` 默认 `false` | **生效**：系统提示不再带官方身份段 |
+| 55 / 66 / 67 / 68 / 72 | `SYSTEM_PROMPT_REPLACE_HEAD` / `SYSTEM_PROMPT_RENDER_GUARD` / `AGENT_LOOP_MESSAGES_GUARD` / `SYSTEM_NODES_CONTENT_GUARD` / `MESSAGES_SYSTEM_CURRENT` | 装配守卫与消息守卫（名字不全是 `SYSTEM_PROMPT_*` 前缀） | **生效**：决定装配时哪几段进入上下文 |
+| 58 / 75 | `REWIND_SKIP_DERIVE` / `REWIND_RESET_TODOS` | 回退空标记不进模型请求、回退重置未完成任务 | **生效** |
+| 87 | `HUNG_PROMPT_LF_NEEDLE` | 空白宿主的挂载比对改用 LF，避免 CRLF 误判（**不是 REWIND**） | **生效** |
 
 ---
 
