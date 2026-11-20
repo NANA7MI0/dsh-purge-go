@@ -1088,12 +1088,13 @@ node patches/purge-patch.mjs apply --dry
 
 ```
 docs/             panel-status.jpg（第 5.1 节那张面板截图）· redteam.md（红队装法，第 17 章链过去）
-lib/              注入层与原生界面 15 个模块（早期 9 个来自 LanJinGod，其余是本仓库加的）
-assets/           categories.json（default-prompt.md 在 .gitignore 里，不进仓库）
+lib/              注入层与原生界面 18 个模块（早期 9 个来自 LanJinGod，其余是本仓库加的）
+  asset-table.json  正文密文（原始 md 不进仓库，见 2.3）
+assets/           categories.json（题材分类出厂值）
 patches/          patches.json（86 条）
   purge-patch.mjs   CLI 壳（91 行，只做参数解析与输出）
   lib/core.mjs      纯函数库（677 行：probe / apply / restore / isDone / verifyFile）
-scripts/          engine-smoke.mjs（段注册与 assemble 重排验证）· kit-check.mjs（插件规范检查，需外部 plugin-kit）
+scripts/          engine-smoke.mjs（段注册与 assemble 重排验证）· kit-check.mjs（插件规范检查，需外部 plugin-kit）· embed-default-prompt.mjs（正文打包）
 test/             7 组共 62 项测试
 install.sh        一键装：打补丁 → 建原生界面目录 → 装插件
 cordis.patch.yml  插件插入声明
@@ -1105,7 +1106,7 @@ CHANGELOG.md      更新日志（第 21 章链过去）
 .gitignore        排除 backup-*/ 、patch-probe.json 这类运行时产物
 ```
 
-合计 **39 个文件、约 0.71 MB**（`git ls-files` 的 39 个，含 `.gitignore`、`docs/` 下 1 张截图与 1 份红队说明；体积会随版本小幅变化）。
+合计 **42 个文件、约 0.77 MB**（`git ls-files` 的 42 个，含 `.gitignore`、`docs/` 下 1 张截图与 1 份红队说明；体积会随版本小幅变化）。
 
 **运行时才会出现的（不进 git，`ls` 能看到别以为多了）：**
 
