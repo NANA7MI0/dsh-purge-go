@@ -334,7 +334,7 @@ node patches/purge-patch.mjs apply            # 真打
 node patches/purge-patch.mjs restore --backup <备份目录>
 ```
 
-**全程可逆**：`apply` 会把要改的文件先复制到 `backup-<时间戳>/files/`（直接用 CLI 跑时在仓库目录；用 `install.sh` 装时在 `~/.dsh/dsh-purge/patch-backup/`）。目录名以 `ls` 出来的为准——为防同秒覆盖，名字后面会带一段后缀。同时生成可执行的 `restore.sh`。每个 `.js` 改完立刻 `node --check`，语法不过就当场从备份还原，不留半成品。
+**全程可逆**：`apply` 先把要改的文件复制到 `backup-<时间戳>/files/`（CLI 跑时在仓库目录，`install.sh` 装时在 `~/.dsh/dsh-purge/patch-backup/`），同时生成 `restore.sh`。每个 `.js` 改完立刻 `node --check`，语法不过就当场还原，不留半成品。
 
 `--root` 或环境变量 `DSH_AI_ROOT` 可指定引擎包目录，默认自动探测。补丁会改 37 个引擎包、**必须重启引擎才生效**。
 
@@ -375,9 +375,7 @@ for f in LICENSE NOTICE README.md assets cordis.patch.yml docs install.sh lib pa
 done
 ```
 
-**这一步只在手机端有意义。** `install.sh` 靠 `/etc/dsh-app/runtime.json` 判断是不是 dsh-go；没有它就跳过，不建也不报错。
-
-dsh-go 的原生界面不在 profile 里，而在 `~/.dsh/dsh-go/plugins/dsh-go-purge/`——那一层由 app 自己扫，`dsh plugin add` 不管。脚本会把里面的每一项做成指向仓库的**软链**，所以以后 `git pull` 更新仓库，原生界面跟着变。
+**只有手机端要这一步。** 那一层不在 profile 里，是 app 自己去 `~/.dsh/dsh-go/plugins/` 扫出来画胶囊和面板的，`dsh plugin add` 管不到。建成**软链**，以后 `git pull` 仓库，原生界面跟着变。
 
 ### 3.3 装插件
 
@@ -385,7 +383,8 @@ dsh-go 的原生界面不在 profile 里，而在 `~/.dsh/dsh-go/plugins/dsh-go-
 dsh plugin --profile web add ~/dsh-purge-go
 ```
 
-这一步会让宿主重新装配插件层。在旧版本上它可能把正在执行的命令掐掉，**现在实测不再发生**；脚本仍把它放最后还是出于同样的道理——万一被打断，前两步已经落地。详见 [2.2](#22-装插件的最后一步会触发宿主重新装配)。
+这一步会让宿主重新装配插件层，所以放最后。详见 [2.2](#22-装插件的最后一步会触发宿主重新装配)。
+
 ---
 
 ## 4. 装好即生效，怎么确认
