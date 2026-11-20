@@ -342,23 +342,17 @@ root@localhost:~/workspace#
 
 ### 3.2 粘命令、回车
 
-**复制下面这一整行，粘进终端，按一次回车。** 三件事用 `&&` 串在一起，前一步成功了才往下走：
+要粘两条命令，一条装、一条重启。每条都是完整的一行，直接复制整行、粘进终端、按回车。
+
+**第 1 条：安装**
 
 ```sh
 git clone https://github.com/NANA7MI0/dsh-purge-go ~/dsh-purge-go && cd ~/dsh-purge-go && sh install.sh
 ```
 
-它依次在做：下载仓库 → 进入目录 → 跑安装脚本。**装的过程中会打印每一步在做什么**，大概十几秒到一两分钟（看网络）。
+三件事串在一起：下载仓库 → 进入目录 → 跑安装脚本。**前一步成功了才往下走**，所以中途出错不会在错误的目录里继续乱跑。
 
-**连不上 GitHub？** 换成 tar 包这条，同样是一整行：
-
-```sh
-curl -L https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main | tar xz && cd dsh-purge-go-main && sh install.sh
-```
-
-它走的是 `codeload.github.com`（GitHub 的下载专用域名，有时比 `git clone` 通得快），下下来解开的目录叫 `dsh-purge-go-main`，效果和 clone 一样。
-
-**装完会看到这个：**
+跑起来会逐步打印在做什么，十几秒到一两分钟（看网络）。**最后看到「装好了」这两个字，就是装完了：**
 
 ```text
 ════════════════════════════════════════
@@ -367,23 +361,33 @@ curl -L https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main
 
   注入层  ✔ 插件加载时自动落盘正文并开启
   补丁层  ✔ 已打到引擎包
-
-▸ 最后一步：重启引擎让补丁生效
-
-  am force-stop io.github.ccch1mneyyy.dsh_app
-
-  然后重新打开 App。（光退出界面不算重启）
 ```
 
-**照着做最后一步就行**：把那行 `am force-stop` 也粘进终端回车，然后重新点开 App。
+**第 2 条：重启**
 
-> **`~/dsh-purge-go` 已经存在时** `git clone` 会报错（`destination path already exists`）。这说明之前装过，换成这条（跳过下载，只跑安装）：
->
-> ```sh
-> cd ~/dsh-purge-go && sh install.sh
-> ```
->
-> 脚本是幂等的，装过再跑一遍不会出问题。
+补丁要重启引擎才生效。把这条粘进同一个终端、回车：
+
+```sh
+am force-stop io.github.ccch1mneyyy.dsh_app
+```
+
+然后重新点开 App 图标。**光退出界面不算重启**——退出只是把界面收起来，引擎还在后台跑。
+
+### 3.2.1 两条特殊情况
+
+**连不上 GitHub**（卡住不动、报 `Failed to connect` 或 `Could not resolve host`）：换成下面这条，它走 `codeload.github.com`——GitHub 的下载专用域名，有时比 `git clone` 通得快。
+
+```sh
+curl -L https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main | tar xz && cd dsh-purge-go-main && sh install.sh
+```
+
+效果和上一条一样，只是解开的目录叫 `dsh-purge-go-main` 而不是 `dsh-purge-go`。
+
+**报 `destination path already exists`**：说明 `~/dsh-purge-go` 已经在了，之前装过。不用删，直接跑这条（跳过下载，只跑安装；脚本是幂等的，装过再跑一遍也不会出问题）：
+
+```sh
+cd ~/dsh-purge-go && sh install.sh
+```
 
 ### 3.3 脚本到底做了什么
 
@@ -462,7 +466,7 @@ node patches/purge-patch.mjs restore --backup <备份目录>
 ```sh
 N=~/.dsh/dsh-go/plugins/dsh-go-purge
 rm -rf "$N" && mkdir -p "$N"
-for f in LICENSE NOTICE README.md assets cordis.patch.yml docs install.sh lib patches package.json; do
+for f in LICENSE NOTICE README.md CHANGELOG.md assets cordis.patch.yml docs install.sh lib patches package.json; do
   [ -e ~/dsh-purge-go/$f ] && ln -sf ~/dsh-purge-go/$f "$N/$f"
 done
 ```
@@ -488,7 +492,7 @@ if (cfg.seedPrompt !== false) seedInject(home)                      // 落盘默
 if (!isFile(statePath(home))) writeState(home, { enabled: cfg.enabled !== false })  // 状态默认开启
 ```
 
-也就是：`~/.dsh/prompt-inject.md` 自动写好（包内默认正文 24.6 KB = 25240 字节，拼上题材分类扩展后约 26 KB），
+也就是：`~/.dsh/prompt-inject.md` 自动写好（包内默认正文 21306 字符，拼上题材分类扩展后 22746 字符、约 27 KB），
 状态文件里 `enabled: true`，系统提示里立刻开始丢官方身份段。
 
 **装完重启引擎就完事了。** 下面这 6 个工具是「管理入口」，用来查状态、换正文、关掉再打开，
@@ -499,7 +503,7 @@ if (!isFile(statePath(home))) writeState(home, { enabled: cfg.enabled !== false 
 重启后开一个新会话（旧会话的 system 已写进历史，顶不动），任选一种确认：
 
 ```sh
-# ① 看正文有没有自动落盘（约 26 KB，比 assets 里那份大——会拼上题材分类扩展）
+# ① 看正文有没有自动落盘（约 27 KB，比包内那份大——会拼上题材分类扩展）
 ls -l ~/.dsh/prompt-inject.md
 
 # ② 看状态文件
@@ -1125,6 +1129,7 @@ node patches/purge-patch.mjs apply --dry
 - [3. 在 App 终端里自己装](#3-在-app-终端里自己装)
   - [3.1 打开终端](#31-打开终端)
   - [3.2 粘命令、回车](#32-粘命令回车)
+  - [3.2.1 两条特殊情况](#321-两条特殊情况)
   - [3.3 脚本到底做了什么](#33-脚本到底做了什么)
   - [3.4 想一条条手动敲](#34-想一条条手动敲)
   - [3.5 打补丁](#35-打补丁)
