@@ -139,7 +139,7 @@ if [ -f /etc/dsh-app/runtime.json ]; then
   rm -rf "$NATIVE"
   mkdir -p "$NATIVE"
   LINKED=0
-  for f in LICENSE NOTICE README.md assets cordis.patch.yml docs install.sh lib patches package.json; do
+  for f in LICENSE NOTICE README.md CHANGELOG.md assets cordis.patch.yml docs install.sh lib patches package.json; do
     if [ -e "$HERE/$f" ]; then
       if ln -sf "$HERE/$f" "$NATIVE/$f" 2>/dev/null; then
         LINKED=$((LINKED+1))
