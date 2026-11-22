@@ -113,22 +113,22 @@ curl -L https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main
 > **第 2 步（建原生界面目录）只在手机端有意义。** 脚本靠 `/etc/dsh-app/runtime.json` 这个文件判断是不是 dsh-go；没有它就打印「这台机器没有 dsh-go 桥接，跳过原生界面目录」，不建也不会报错。
 >
 > dsh-go 的原生界面不在 profile 里，而是在
-> `~/.dsh/dsh-go/plugins/dsh-go-purge/`——那一层由 app 自己扫，`dsh plugin add` 不管。
+> ~/.dsh/dsh-go/plugins/dsh-go-purge/——那一层由 app 自己扫，dsh plugin add 不管。
 > 脚本会把里面每一项**复制**一份进去（共约 1.1 MB），是一份独立副本而不是快捷方式——
 > 仓库以后被删、被移走，这个目录仍然完整，App 照常启动。
-> 代价是 `git pull` 之后要再同步一次；点面板上的「更新」会自动做这件事。
+> 代价是 git pull 之后要再同步一次；点面板上的「更新」会自动做这件事。
 
-> **不要用 npm 装。** `npm view dsh-go-purge` 会显示 `0.4.18`——那是 0.4.x 时代留下的旧版本，之后就没再发布过。
+> **不要用 npm 装。** npm view dsh-go-purge 会显示 `0.4.18`——那是 0.4.x 时代留下的旧版本，之后就没再发布过。
 > 原因：npm 上的发布账号目前是 **suspended / temporarily disabled** 状态，提不了新版本。包本身可以正常下载，只是停在 0.4.18。
-> 用下面两条命令之一，才是当前版本。想知道拿到的是不是最新，跑 `node -p "require('./package.json').version"` 对一下 [Releases](https://github.com/NANA7MI0/dsh-purge-go/releases) 上的版本号。
+> 用下面两条命令之一，才是当前版本。想知道拿到的是不是最新，跑 node -p "require('./package.json').version" 对一下 [Releases](https://github.com/NANA7MI0/dsh-purge-go/releases) 上的版本号。
 
 ### 1.1 install.sh 的参数
 
-> **为什么写成 `sh install.sh` 而不是 `./install.sh`**
+> **为什么写成 sh install.sh 而不是 ./install.sh**
 >
 > 家目录（f2fs）上 `chmod +x` 有效，`./install.sh` 能跑；但**把仓库放 `/sdcard` 就不行**——
 > 那是 FAT32，没有执行位，直接跑会报 `Permission denied`。
-> 用 `sh install.sh` 不需要执行权限，两种情况都能跑，所以文档统一用这个写法。
+> 用 sh install.sh 不需要执行权限，两种情况都能跑，所以文档统一用这个写法。
 
 | 参数 | 作用 |
 |---|---|
@@ -154,9 +154,9 @@ curl -L https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main
 **放家目录下的任何位置都行**：`~/dsh-purge-go`、`~/tools/dsh-purge-go`、`~/src/dsh-purge-go`。推荐放在重启后还在的地方，因为它是你以后 `git pull` 更新的源头——仓库没了，插件还能跑，但只能停在当前版本。
 
 > **原生界面目录是一份副本，不是快捷方式。** 装的时候把仓库里那 11 项复制进去（共约 1.1 MB），之后仓库被删、被移走、被 git 操作搞乱，这个目录都完整，App 照常启动。
-> **代价**：`git pull` 之后要再同步一次——点面板上的「更新」会自动做（拉代码 → 还原补丁 → 重打补丁 → 同步副本，一次做完）。
+> **代价**：git pull 之后要再同步一次——点面板上的「更新」会自动做（拉代码 → 还原补丁 → 重打补丁 → 同步副本，一次做完）。
 >
-> **已经中招的机器**（App 反复报 `start failed: .../dsh-go/plugins/dsh-go-purge/LICENSE`）：在终端里跑 `sh install.sh --repair-native`，只重建那个目录，别的一概不动。
+> **已经中招的机器**（App 反复报 start failed: .../dsh-go/plugins/dsh-go-purge/LICENSE）：在终端里跑 sh install.sh --repair-native，只重建那个目录，别的一概不动。
 
 ### 1.2 装插件的最后一步会触发宿主重新装配
 
@@ -485,7 +485,7 @@ cat ~/.dsh/dsh-purge/state.json            # 应该有 "enabled": true
 ```
 
 > **注意别用 `$DSH_HOME`**：那个变量只在引擎进程里才有值，你手敲 shell 时是空的，
-> `ls -l $DSH_HOME/...` 会变成 `ls -l /prompt-inject.md` 然后报 No such file。
+> ls -l $DSH_HOME/... 会变成 ls -l /prompt-inject.md 然后报 No such file。
 > 默认位置就是 `~/.dsh`；如果你改过 `DSH_HOME`，把它换成实际路径即可。
 
 ```sh
@@ -499,9 +499,9 @@ cat ~/.dsh/dsh-purge/state.json            # 应该有 "enabled": true
 
 > ### 装它之前，先看这四条
 >
-> - **能预演**：`sh install.sh --dry` 只扫描、预演补丁会改哪些文件，不装插件、不改引擎、不在仓库里留文件。
+> - **能预演**：sh install.sh --dry 只扫描、预演补丁会改哪些文件，不装插件、不改引擎、不在仓库里留文件。
 > - **有备份**：`apply` 改之前，会把每个目标文件复制到 `~/.dsh/dsh-purge/patch-backup/<时间戳>/`（`install.sh` 装的就是这里）；用 CLI 在仓库目录直接跑时则落在 `backup-<时间戳>/`。路径会打印出来。
-> - **能还原**：`node patches/purge-patch.mjs restore --backup <那批>` 一条命令回到原版。卸载与还原的完整步骤见 [14. 卸载插件](#14-卸载插件) / [15. 还原引擎（备份还在 / 备份没了）](#15-还原引擎备份还在--备份没了)。
+> - **能还原**：一条命令回到原版——跑 purge-patch.mjs 的 restore 子命令，后面跟备份目录（把「备份目录」换成实际路径，第 15 章有例子）。卸载与还原的完整步骤见 [14. 卸载插件](#14-卸载插件) / [15. 还原引擎（备份还在 / 备份没了）](#15-还原引擎备份还在--备份没了)。
 > - **先留存一份说明书**：`cp README.md ~/dsh-purge-readme.md`。卸载会删掉整个仓库目录，这份手册跟着没——放仓库外面就一直在。
 
 > ### 它具体改了哪两处
