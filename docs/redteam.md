@@ -39,7 +39,7 @@ require('fs').writeFileSync(f,JSON.stringify(p,null,2))"
 在红队会话里让它跑自检：`调 redteam_preflight，报 all_checked.total / available / broken / unknown 四个数`。
 
 正常结果：`total: 46`（41 红队 + 5 dsh-go 常规），`unknown: 0`。
-如果 `total: 0` 或全是 `unknown`，是上游两个调用漏传 `scope`（见 17.5）。
+如果 `total: 0` 或全是 `unknown`，是上游两个调用漏传 `scope`（见本文最后一节）。
 
 ## 4. 装完不等于能打：还要自己准备工具包
 
