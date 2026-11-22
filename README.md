@@ -366,7 +366,19 @@ for f in LICENSE NOTICE README.md CHANGELOG.md assets cordis.patch.yml docs inst
   [ -e ~/dsh-purge-go/$f ] && ln -sf ~/dsh-purge-go/$f "$N/$f"
 done
 
-# 第三步：装插件（注入层）—— 放最后，它会触发宿主重新装配
+# 第三步（可选）：藏掉 App 自带的「插件」胶囊
+# 装完输入框上方会有两颗：破甲的「破甲状态」，和 App 自带的「插件」入口。
+# 本仓库只有一个插件，那颗点进去是同一个面板。不想看它就跑这一段；
+# 只往 hide 数组里追加一项，你自己配的其它隐藏项不受影响。想恢复就删掉那一项。
+UI=~/.dsh/dsh-go/ui.json
+node -e 'const fs=require("fs"),p=process.argv[1];let j={version:1};
+  try{j=JSON.parse(fs.readFileSync(p,"utf8"))}catch{};
+  if(!Array.isArray(j.hide))j.hide=[];
+  if(!j.hide.includes("pluginCapsule")){j.hide.push("pluginCapsule");
+  fs.mkdirSync(require("path").dirname(p),{recursive:true});
+  fs.writeFileSync(p,JSON.stringify(j,null,2)+"\n")}' "$UI"
+
+# 第四步：装插件（注入层）—— 放最后，它会触发宿主重新装配
 dsh plugin --profile web add ~/dsh-purge-go
 ```
 ### 2.5 打补丁
