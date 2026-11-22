@@ -133,6 +133,7 @@ curl -L https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main
 | `sh install.sh --plugin-only` | 只装插件，不打补丁。注入层生效，引擎的审批和沙箱限制仍在 |
 | `sh install.sh --dry` | 只扫描 + 预演补丁会改哪些文件，**不装插件、不改引擎、不在仓库里留文件**（probe 结果写临时目录）。和 `--plugin-only` 一起给会直接报错 |
 | `sh install.sh --profile web` | 指定 profile，默认 `web`。也接受等号写法 `--profile=web` |
+| `sh install.sh --repair-native` | **只重建原生界面目录**，补丁和插件都不碰。给「插件目录坏了、App 起不来」的机器用——不卸载、不重装，一条命令修好 |
 | `sh install.sh -h` / `--help` | 打印用法 |
 
 装到哪个目录都行，用 `~`（也就是 `$HOME`）而不是写死 `/root`——因为**不同环境家目录不一样**：
@@ -148,6 +149,10 @@ curl -L https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main
 | **`/sdcard`** | **FAT32 没有执行位**，`./install.sh` 跑不了（所以文档统一用 `sh install.sh`）；而且外部存储可能被系统清理 |
 
 **放家目录下的任何位置都行**：`~/dsh-purge-go`、`~/tools/dsh-purge-go`、`~/src/dsh-purge-go`。插件用 `link:` 注册、原生界面目录全做软链，就是为了以后 `git pull` 更新仓库时胶囊和面板跟着自动变——这个设计的前提就是仓库待在一个重启后还在的地方。
+
+> **从临时目录跑也安全。** 脚本发现仓库在 `/tmp`、`/var/tmp`、`/dev/shm` 这类地方时，会**自动改成复制**而不是做软链——那些目录一清，软链就全悬空，App 读到不存在的文件会直接把整个 runtime 拉黑，连安全模式都起不来。
+>
+> **已经中招的机器**（App 反复报 `start failed: .../dsh-go/plugins/dsh-go-purge/LICENSE`）：在终端里跑 `sh install.sh --repair-native`，只重建那个目录，别的一概不动。
 
 ### 1.2 装插件的最后一步会触发宿主重新装配
 

@@ -18,6 +18,8 @@ DRY=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --plugin-only) MODE=plugin; shift ;;
+    # 只重建原生界面目录，补丁和插件都不碰——给被旧脚本搞坏、App 起不来的机器用
+    --repair-native) MODE=repair; shift ;;
     # --dry 单独一个开关，不跟 MODE 抢变量：原来两者共用 MODE，后出现的会覆盖前面的，
     # 于是 `--dry --plugin-only` 反而会真的装插件。
     --dry)         DRY=1; shift ;;
@@ -61,66 +63,69 @@ command -v dsh >/dev/null 2>&1 || die "找不到 dsh 命令。确认 dsh-go 已�
 
 cd "$HERE" || die "进不去 $HERE"
 
+if [ "$MODE" != "repair" ]; then
 # ── 第 1 步：打补丁（放在最前，因为它只改文件、不触发宿主重新装配）────
 if [ "$MODE" = "plugin" ]; then
-  say "▸ 已跳过补丁层（--plugin-only）"
-  say ""
-  say "  本次只装插件：审批与沙箱两个配置项保持原样。"
-  say "    想补上：cd $HERE && sh install.sh"
-  say ""
+    say "▸ 已跳过补丁层（--plugin-only）"
+    say ""
+    say "  本次只装插件：审批与沙箱两个配置项保持原样。"
+    say "    想补上：cd $HERE && sh install.sh"
+    say ""
 else
-  if [ "$DRY" = "1" ]; then
-    say "▸ 预演模式：只扫描 + 预演补丁"
-    say "  不装插件、不改任何文件。"
-  else
-    say "▸ 第 1 步 / 4：打补丁到引擎包"
-  fi
-  say ""
-
-  say "  扫描中 …"
-  # --dry 时 probe 结果写到临时目录，别往仓库里留文件（见下面的「什么都没改」）
-  if [ "$DRY" = "1" ]; then
-    PROBE_OUT_PATH="$(mktemp -d)/patch-probe.json"
-  else
-    PROBE_OUT_PATH="$HERE/patch-probe.json"
-  fi
-  if ! PROBE_OUT=$(node patches/purge-patch.mjs probe --out "$PROBE_OUT_PATH" 2>&1); then
-    say "$PROBE_OUT" | sed 's/^/  /'
-    die "probe 失败。"
-  fi
-  say "$PROBE_OUT" | grep -E '^tally:' | sed 's/^/  /' || true
-  say ""
-
-  if [ "$DRY" = "1" ]; then
-    node patches/purge-patch.mjs apply --dry 2>&1 | sed 's/^/  /'
+    if [ "$DRY" = "1" ]; then
+      say "▸ 预演模式：只扫描 + 预演补丁"
+      say "  不装插件、不改任何文件。"
+    else
+      say "▸ 第 1 步 / 4：打补丁到引擎包"
+    fi
     say ""
-    say "  ✔ 预演完成，什么都没改。"
-    say "  真安装请去掉 --dry 重跑：sh install.sh"
-    say ""
-    exit 0
-  fi
 
-  # 备份统一放到插件自己的目录：~/.dsh/dsh-purge/patch-backup/<时间戳>
-  # 不传 --backup 的话 CLI 会建在仓库目录（backup-<时间戳>），插件的「还原补丁」
-  # 就找不到——第一次安装的人点了只会看到「没有可还原的补丁备份」。
-  # 加毫秒随机后缀，避免同一秒内重跑覆盖上一份真备份
-  # 用 UTC（date -u）与 CLI／插件保持一致：那两处都是 toISOString()。
-  # 混用本地时间会让目录名排序错乱——本地比 UTC 快 8 小时，
-  # 「19:45 本地」会排到「12:38 UTC」后面，而后者其实更新。
-  BACKUP_DIR="$HOME/.dsh/dsh-purge/patch-backup/$(date -u +%Y%m%d%H%M%S)-$$"
-  mkdir -p "$BACKUP_DIR"
-  # 不能写成 `if node ... | sed`：if 看的是管道最后一个命令（sed）的退出码，
-  # sed 恒返回 0，于是补丁全失败也照样打印「✔ 补丁已打上」并以 0 退出。
-  # 先把输出收进变量、按 node 自己的退出码判断，再决定要不要打印。
-  if APPLY_OUT=$(node patches/purge-patch.mjs apply --backup "$BACKUP_DIR" 2>&1); then
-    printf '%s\n' "$APPLY_OUT" | sed 's/^/  /'
-    say "  ✔ 补丁已打上"
-    say "    备份：$BACKUP_DIR"
-    say "    （面板上的「还原补丁」用的就是这里）"
-  else
-    die "打补丁失败。引擎包可能已被部分修改——跑 sh install.sh --dry 看状态，或查 patch-probe.json。"
-  fi
-  say ""
+    say "  扫描中 …"
+    # --dry 时 probe 结果写到临时目录，别往仓库里留文件（见下面的「什么都没改」）
+    if [ "$DRY" = "1" ]; then
+      PROBE_OUT_PATH="$(mktemp -d)/patch-probe.json"
+    else
+      PROBE_OUT_PATH="$HERE/patch-probe.json"
+    fi
+    if ! PROBE_OUT=$(node patches/purge-patch.mjs probe --out "$PROBE_OUT_PATH" 2>&1); then
+      say "$PROBE_OUT" | sed 's/^/  /'
+      die "probe 失败。"
+    fi
+    say "$PROBE_OUT" | grep -E '^tally:' | sed 's/^/  /' || true
+    say ""
+
+    if [ "$DRY" = "1" ]; then
+      node patches/purge-patch.mjs apply --dry 2>&1 | sed 's/^/  /'
+      say ""
+      say "  ✔ 预演完成，什么都没改。"
+      say "  真安装请去掉 --dry 重跑：sh install.sh"
+      say ""
+      exit 0
+    fi
+
+    # 备份统一放到插件自己的目录：~/.dsh/dsh-purge/patch-backup/<时间戳>
+    # 不传 --backup 的话 CLI 会建在仓库目录（backup-<时间戳>），插件的「还原补丁」
+    # 就找不到——第一次安装的人点了只会看到「没有可还原的补丁备份」。
+    # 加毫秒随机后缀，避免同一秒内重跑覆盖上一份真备份
+    # 用 UTC（date -u）与 CLI／插件保持一致：那两处都是 toISOString()。
+    # 混用本地时间会让目录名排序错乱——本地比 UTC 快 8 小时，
+    # 「19:45 本地」会排到「12:38 UTC」后面，而后者其实更新。
+    BACKUP_DIR="$HOME/.dsh/dsh-purge/patch-backup/$(date -u +%Y%m%d%H%M%S)-$$"
+    mkdir -p "$BACKUP_DIR"
+    # 不能写成 `if node ... | sed`：if 看的是管道最后一个命令（sed）的退出码，
+    # sed 恒返回 0，于是补丁全失败也照样打印「✔ 补丁已打上」并以 0 退出。
+    # 先把输出收进变量、按 node 自己的退出码判断，再决定要不要打印。
+    if APPLY_OUT=$(node patches/purge-patch.mjs apply --backup "$BACKUP_DIR" 2>&1); then
+      printf '%s\n' "$APPLY_OUT" | sed 's/^/  /'
+      say "  ✔ 补丁已打上"
+      say "    备份：$BACKUP_DIR"
+      say "    （面板上的「还原补丁」用的就是这里）"
+    else
+      die "打补丁失败。引擎包可能已被部分修改——跑 sh install.sh --dry 看状态，或查 patch-probe.json。"
+    fi
+    say ""
+fi
+
 fi
 
 # ── 第 2 步：原生界面目录（只有 dsh-go 手机端需要）─────────────────
@@ -131,36 +136,81 @@ fi
 # 为什么排在装插件之前：建目录是纯文件操作、不会被打断；装插件是整条流程里唯一
 # 可能掐断命令的步骤。顺序反过来会出现「插件装上了、目录没建」——用户拿到一个
 # 既没有胶囊也没有面板的插件，连点哪儿修都找不到。
+#
+# 这里出过一次严重事故：老实现是 rm -rf 然后逐个 ln，中途失败就留下一个残缺目录。
+# App 启动时逐个读这个目录里的文件，读不到 LICENSE 就把整个 runtime 拉黑、
+# 连安全模式都起不来（safe mode 只换 profile，这一层是全局扫的）。
+# 所以下面改成「先建到 .tmp、逐个校验、全部通过再整体换」：
+#   ① 任何一个文件建好读不到，就整批放弃，旧目录原样不动；
+#   ② 换上去用 mv（同一文件系统内是原子操作），不留下半截状态；
+#   ③ 源目录落在 /tmp 这类临时位置时改为复制——否则临时目录一清，软链全部悬空。
 if [ -f /etc/dsh-app/runtime.json ]; then
   NATIVE="$HOME/.dsh/dsh-go/plugins/dsh-go-purge"
+  NEW="$NATIVE.tmp.$$"
+  OLD="$NATIVE.old.$$"
   say "▸ 第 2 步 / 4：建原生界面目录"
   say "  $NATIVE"
   say ""
-  rm -rf "$NATIVE"
-  mkdir -p "$NATIVE"
+
+  case "$HERE" in
+    /tmp/*|/var/tmp/*|/dev/shm/*) COPY=1 ;;
+    *) COPY=0 ;;
+  esac
+  if [ "$COPY" = "1" ]; then
+    say "  仓库在临时目录（$HERE），这次改用复制——软链指着临时目录，"
+    say "  临时目录一清就会全部悬空，App 会因此起不来。"
+    say ""
+  fi
+
+  rm -rf "$NEW"
+  mkdir -p "$NEW" || die "建不了临时目录：$NEW"
   LINKED=0
+  FAILED=""
   for f in LICENSE NOTICE README.md CHANGELOG.md assets cordis.patch.yml docs install.sh lib patches package.json; do
-    if [ -e "$HERE/$f" ]; then
-      if ln -sf "$HERE/$f" "$NATIVE/$f" 2>/dev/null; then
-        LINKED=$((LINKED+1))
-      else
-        say "  ⚠ 链接失败：$f"
-      fi
+    if [ ! -e "$HERE/$f" ]; then
+      FAILED="$FAILED $f(源里没有)"
+      continue
+    fi
+    if [ "$COPY" = "1" ]; then
+      cp -R "$HERE/$f" "$NEW/$f" 2>/dev/null
+    else
+      ln -sf "$HERE/$f" "$NEW/$f" 2>/dev/null
+    fi
+    if [ -r "$NEW/$f" ]; then
+      LINKED=$((LINKED+1))
+    else
+      FAILED="$FAILED $f(建好读不到)"
     fi
   done
-  if [ "$LINKED" -lt 11 ]; then
-    say "  ⚠ 只链上了 $LINKED/11 项，原生界面可能缺文件"
+
+  if [ -n "$FAILED" ]; then
+    rm -rf "$NEW"
+    say "  ⚠ 这些没弄好：$FAILED"
+    say "  ⚠ 已经放弃替换，原来的 $NATIVE 一点没动"
+    die "第 2 步失败，原生目录保持原样"
   fi
-  say "  ✔ 已链到 $HERE"
-  say ""
-  say "  这里每一项都是软链，所以以后 git pull 更新仓库，原生界面跟着变，"
-  say "  不用再单独同步 package.json 里的 dshGo 清单。"
+
+  if [ -e "$NATIVE" ]; then
+    mv "$NATIVE" "$OLD" || { rm -rf "$NEW"; die "挪不开旧目录，已放弃替换"; }
+  fi
+  if ! mv "$NEW" "$NATIVE"; then
+    [ -e "$OLD" ] && mv "$OLD" "$NATIVE"
+    rm -rf "$NEW"
+    die "替换原生目录失败，已还原"
+  fi
+  rm -rf "$OLD"
+
+  say "  ✔ $LINKED 项就位（$([ "$COPY" = "1" ] && printf 复制 || printf 软链)）"
+  if [ "$COPY" = "0" ]; then
+    say ""
+    say "  每一项都是软链，所以以后 git pull 更新仓库，原生界面跟着变，"
+    say "  不用再单独同步 package.json 里的 dshGo 清单。"
+  fi
   say ""
 else
   say "（这台机器没有 dsh-go 桥接，跳过原生界面目录）"
   say ""
 fi
-
 
 # ── 第 3 步：隐藏 App 自带的「插件」胶囊 ────────────────────────────
 # 装完插件后输入框上方会出现两颗：本插件的「破甲状态」，和 App 自带的「插件」入口。
@@ -197,7 +247,9 @@ if [ -f /etc/dsh-app/runtime.json ]; then
   say ""
 fi
 
+if [ "$MODE" != "repair" ]; then
 # ── 第 4 步：装插件（放最后，它会触发宿主重新装配插件层）──────────
+# repair 模式到这就结束：只重建原生目录，不动补丁和插件。
 say "▸ 第 4 步 / 4：装插件到 profile「$PROFILE」"
 say "  $HERE"
 say ""
@@ -253,3 +305,5 @@ say "  本次的补丁备份在：${BACKUP_DIR:-（本次没打补丁）}"
 say "  命令行撤销：node patches/purge-patch.mjs restore --backup \"$BACKUP_DIR\""
 say "  或者直接点面板上的「还原补丁」。"
 say ""
+
+fi
