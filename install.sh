@@ -73,7 +73,7 @@ else
     say "▸ 预演模式：只扫描 + 预演补丁"
     say "  不装插件、不改任何文件。"
   else
-    say "▸ 第 1 步 / 3：打补丁到引擎包"
+    say "▸ 第 1 步 / 4：打补丁到引擎包"
   fi
   say ""
 
@@ -133,7 +133,7 @@ fi
 # 既没有胶囊也没有面板的插件，连点哪儿修都找不到。
 if [ -f /etc/dsh-app/runtime.json ]; then
   NATIVE="$HOME/.dsh/dsh-go/plugins/dsh-go-purge"
-  say "▸ 第 2 步 / 3：建原生界面目录"
+  say "▸ 第 2 步 / 4：建原生界面目录"
   say "  $NATIVE"
   say ""
   rm -rf "$NATIVE"
@@ -161,8 +161,44 @@ else
   say ""
 fi
 
-# ── 第 3 步：装插件（放最后，它会触发宿主重新装配插件层）──────────
-say "▸ 第 3 步 / 3：装插件到 profile「$PROFILE」"
+
+# ── 第 3 步：隐藏 App 自带的「插件」胶囊 ────────────────────────────
+# 装完插件后输入框上方会出现两颗：本插件的「破甲状态」，和 App 自带的「插件」入口。
+# 本仓库只有一个插件，那颗入口点进去就是这个面板——功能重复，还容易让人以为有两套。
+# dsh-go 的 ui.json 支持隐藏指定元素。这里只往 hide 数组里追加一项：
+# 用户自己配的其它项原样保留，已经有就不重复加。
+if [ -f /etc/dsh-app/runtime.json ]; then
+  say "▸ 第 3 步 / 4：隐藏 App 自带的「插件」胶囊"
+  UI_JSON="$HOME/.dsh/dsh-go/ui.json"
+  UI_RESULT=$(node -e '
+    const fs = require("fs"), p = process.argv[1]
+    let j = { version: 1 }
+    try {
+      j = JSON.parse(fs.readFileSync(p, "utf8"))
+    } catch (error) {
+      // 文件存在但解析不了：先留一份原文再重建，别把用户别的配置弄丢
+      try {
+        if (require("fs").existsSync(p)) require("fs").copyFileSync(p, p + ".bak")
+      } catch {}
+    }
+    if (!Array.isArray(j.hide)) j.hide = []
+    if (j.hide.includes("pluginCapsule")) { console.log("skip") }
+    else {
+      j.hide.push("pluginCapsule")
+      require("fs").mkdirSync(require("path").dirname(p), { recursive: true })
+      fs.writeFileSync(p, JSON.stringify(j, null, 2) + "\n")
+      console.log("added")
+    }
+  ' "$UI_JSON" 2>/dev/null) || UI_RESULT=skip
+  case "$UI_RESULT" in
+    added) say "  ✔ 已写进 $UI_JSON（重启 App 后生效，其余隐藏项原样保留）" ;;
+    *)     say "  · 已经隐藏过了，跳过" ;;
+  esac
+  say ""
+fi
+
+# ── 第 4 步：装插件（放最后，它会触发宿主重新装配插件层）──────────
+say "▸ 第 4 步 / 4：装插件到 profile「$PROFILE」"
 say "  $HERE"
 say ""
 # 旧版引擎上这一步会把正在执行的那条命令掐掉（Error: tool call aborted）。
