@@ -119,7 +119,7 @@ git clone https://github.com/NANA7MI0/dsh-purge-go ~/dsh-purge-go && cd ~/dsh-pu
 **连不上 GitHub 就换 tar 包**（走 `codeload.github.com`，有时更通）：
 
 ```sh
-curl -L https://github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main | tar xz && cd dsh-purge-go-main && sh install.sh
+curl -L https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main | tar xz && cd dsh-purge-go-main && sh install.sh
 ```
 
 `install.sh` 连做四件事，次序是 **打补丁** → **建原生界面目录** → **藏掉 App 自带的「插件」胶囊** → **装插件**，做完提示你重启。**想先看会改哪些文件，把 `sh install.sh` 换成 `sh install.sh --dry`**：只扫描、预演，不装插件、不改引擎、不在仓库里留文件。
