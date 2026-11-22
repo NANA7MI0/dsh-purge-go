@@ -91,7 +91,7 @@ curl -L https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main
    node -p "require('/opt/dsh/node_modules/@deepseek-ai/dsh-base/package.json').version"
    ```
 
-2. **手机上没有任何沙箱后端。** bubblewrap、Landlock 在 Android proot 里都不存在，所以安装过程不经过审批或沙箱流程（引擎的 `ask` 在手机上也没有应答器可用，见 [第 6 章](#6-为什么手机上必须改审批)）。安装本身只做文件操作：把补丁写进 39 个引擎包里的**字符串常量**（不改逻辑、不加代码）、建一个软链目录、在 profile 里注册插件。
+2. **手机上没有任何沙箱后端。** bubblewrap、Landlock 在 Android proot 里都不存在，所以安装过程不经过审批或沙箱流程（引擎的 `ask` 在手机上也没有应答器可用，见 [第 6 章](#6-为什么手机上必须改审批)）。安装本身只做文件操作：把补丁写进 39 个引擎包里的**字符串常量**（不改逻辑、不加代码）、复制一份原生界面目录（1.1 MB）、在 profile 里注册插件。
 
 3. **每一步都有备份，一条命令能撤。** 详见 [15. 还原引擎（备份还在 / 备份没了）](#15-还原引擎备份还在--备份没了)。
 
@@ -112,8 +112,9 @@ curl -L https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main
 >
 > dsh-go 的原生界面不在 profile 里，而是在
 > `~/.dsh/dsh-go/plugins/dsh-go-purge/`——那一层由 app 自己扫，`dsh plugin add` 不管。
-> 脚本会把里面的每一项都做成指向仓库的**软链**，所以以后 `git pull` 更新仓库，
-> 原生界面跟着变，不用再单独同步 `package.json` 里的清单。
+> 脚本会把里面每一项**复制**一份进去（共约 1.1 MB），是一份独立副本而不是快捷方式——
+> 仓库以后被删、被移走，这个目录仍然完整，App 照常启动。
+> 代价是 `git pull` 之后要再同步一次；点面板上的「更新」会自动做这件事。
 
 > **不要用 npm 装。** `npm view dsh-go-purge` 会显示 `0.4.18`——那是 0.4.x 时代留下的旧版本，之后就没再发布过。
 > 原因：npm 上的发布账号目前是 **suspended / temporarily disabled** 状态，提不了新版本。包本身可以正常下载，只是停在 0.4.18。
@@ -145,12 +146,13 @@ curl -L https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main
 
 | 别放 | 为什么 |
 |---|---|
-| **`/tmp`** | **内存盘（tmpfs），重启就清空。**仓库没了，原生界面目录里那堆软链全指向虚空——胶囊和面板直接消失，插件看起来像坏了，其实只是文件被系统擦掉了 |
+| **`/tmp`** | **内存盘（tmpfs），重启就清空。**原生界面目录是一份独立副本，仓库没了它照常工作——但你已经没法再 `git pull` 更新了，下次装还得重新下载 |
 | **`/sdcard`** | **FAT32 没有执行位**，`./install.sh` 跑不了（所以文档统一用 `sh install.sh`）；而且外部存储可能被系统清理 |
 
-**放家目录下的任何位置都行**：`~/dsh-purge-go`、`~/tools/dsh-purge-go`、`~/src/dsh-purge-go`。插件用 `link:` 注册、原生界面目录全做软链，就是为了以后 `git pull` 更新仓库时胶囊和面板跟着自动变——这个设计的前提就是仓库待在一个重启后还在的地方。
+**放家目录下的任何位置都行**：`~/dsh-purge-go`、`~/tools/dsh-purge-go`、`~/src/dsh-purge-go`。推荐放在重启后还在的地方，因为它是你以后 `git pull` 更新的源头——仓库没了，插件还能跑，但只能停在当前版本。
 
-> **从临时目录跑也安全。** 脚本发现仓库在 `/tmp`、`/var/tmp`、`/dev/shm` 这类地方时，会**自动改成复制**而不是做软链——那些目录一清，软链就全悬空，App 读到不存在的文件会直接把整个 runtime 拉黑，连安全模式都起不来。
+> **原生界面目录是一份副本，不是快捷方式。** 装的时候把仓库里那 11 项复制进去（共约 1.1 MB），之后仓库被删、被移走、被 git 操作搞乱，这个目录都完整，App 照常启动。
+> **代价**：`git pull` 之后要再同步一次——点面板上的「更新」会自动做（拉代码 → 还原补丁 → 重打补丁 → 同步副本，一次做完）。
 >
 > **已经中招的机器**（App 反复报 `start failed: .../dsh-go/plugins/dsh-go-purge/LICENSE`）：在终端里跑 `sh install.sh --repair-native`，只重建那个目录，别的一概不动。
 
@@ -223,10 +225,13 @@ node --input-type=module -e "import('./lib/table-read.js').then(m => console.log
 
 **重跑一次 `sh install.sh` 就行，不要只 `git pull`。**（0.5.0 用户也一样——「建原生界面目录」是 0.5.1 才补进脚本的）
 
-原因：0.5 起原生界面的清单（胶囊、状态条、面板）改成了「指向仓库的软链」。老安装里的
+原因：0.5 起原生界面的清单（胶囊、状态条、面板）改由插件自己那份 `package.json` 提供。老安装里的
 `~/.dsh/dsh-go/plugins/dsh-go-purge/package.json` 是**独立文件**——只 pull 仓库，它不会变，
 app 读到的还是老清单，于是胶囊点开没有面板、或者面板报「插件还没处理这一项」。
-`install.sh` 会把那个目录整个重建，清单也变成软链，之后 pull 就自动同步了。
+`install.sh` 会把那个目录整个重建，清单也跟着更新。
+
+> **0.6.8 起改成复制。** 之前是软链到仓库，好处是 pull 完自动就新，代价是仓库一被删
+> App 整个起不来、只能用外部工具救。现在是一份副本，安全优先。
 
 ```sh
 cd ~/dsh-purge-go && git pull && sh install.sh
@@ -438,7 +443,7 @@ for f in LICENSE NOTICE README.md CHANGELOG.md assets cordis.patch.yml docs inst
 done
 ```
 
-**只有手机端要这一步。** 那一层不在 profile 里，是 app 自己去 `~/.dsh/dsh-go/plugins/` 扫出来画胶囊和面板的，`dsh plugin add` 管不到。建成**软链**，以后 `git pull` 仓库，原生界面跟着变。
+**只有手机端要这一步。** 那一层不在 profile 里，是 app 自己去 `~/.dsh/dsh-go/plugins/` 扫出来画胶囊和面板的，`dsh plugin add` 管不到。**复制一份完整副本**进去——不是软链，理由见 [2. 在 App 终端里自己装](#2-在-app-终端里自己装) 那段。
 
 ### 2.7 装插件
 
@@ -983,7 +988,7 @@ am force-stop io.github.ccch1mneyyy.dsh_app
 | **注入层** | `~/.dsh/prompt-inject.md` | 删文件 | 每次开对话都往系统提示里塞破甲正文 |
 | **插件注册** | `~/.dsh/profiles/web/package.json` | `dsh plugin remove` | 重启后插件又加载回来 |
 | **插件文件** | `~/dsh-purge-go`、`node_modules` 软链 | `rm -rf` | 占空间；重装时可能撞路径 |
-| **原生界面目录** | `~/.dsh/dsh-go/plugins/dsh-go-purge/`（胶囊 / 状态条 / 面板在这里声明） | `rm -rf` | app 还认为这个插件有原生界面；里面的软链变成断链，插件详情页可能报「原生界面 · N 项有误」 |
+| **原生界面目录** | `~/.dsh/dsh-go/plugins/dsh-go-purge/`（胶囊 / 状态条 / 面板在这里声明） | `rm -rf` | app 还认为这个插件有原生界面，但文件没了，可能报「原生界面 · N 项有误」；删掉不影响 App 启动 |
 
 ### 14.3 怎么确认真的卸干净
 
@@ -1010,6 +1015,36 @@ ls ~/.dsh/dsh-go/plugins/ 2>/dev/null    # 没有 dsh-go-purge 就算干净
 判断是否真卸干净只有两条硬标准：**`grep -r 'dsh-purge' /opt/dsh/node_modules/@deepseek-ai/ 搜不到任何东西**，**关键文案是原版**（见 [15.3](#153-验证有没有还原干净) 的逐字节对比）。
 
 ---
+
+
+### 14.4 App 起不来的时候怎么救
+
+**症状**：App 启动就闪退或停在加载页，反复出现这几行：
+
+```
+[dsh-app] start failed: .../dsh-go/plugins/dsh-go-purge/LICENSE
+[dsh-app] runtime failed; system service recreation disabled
+```
+
+**这个时候App 内的终端点不开**——侧边栏「全部功能」整个是灰的，因为它也依赖引擎。安全模式（safe mode）只换 profile，救不了这个。
+
+**原因**：原生界面目录里的文件读不到。0.6.8 之前那套是「指向仓库的软链」，仓库被删/被移走/被 git 操作搞乱，11 条软链就全悬空。
+
+**三种救法，按能不能用挑：**
+
+| 你有什么 | 怎么做 |
+|---|---|
+| **电脑 + USB 线** | `adb shell` 进去，`rm -rf /data/user/0/io.github.ccch1mneyyy.dsh_app/files/runtime/rootfs/root/.dsh/dsh-go/plugins/dsh-go-purge`，然后正常打开 App |
+| **手机有 root（KernelSU / Magisk）** | 用任意带 root 的终端 `su` 进去，删同一个路径 |
+| **什么都没有** | 只能重装 App。**重装会清掉 App 私有目录，历史对话一起没**——所以重装前先确认没有别的办法 |
+
+**0.6.8 起不会再进这个状态**：原生界面目录是一份独立副本，仓库没了它照样完整；而且装的时候先建到临时目录、逐个校验、全部通过才替换，中途失败旧目录一点不动。
+
+**已经中招、但 App 还能打开终端的话**，一条命令修回来：
+
+```sh
+cd ~/dsh-purge-go && sh install.sh --repair-native
+```
 
 ## 15. 还原引擎（备份还在 / 备份没了）
 

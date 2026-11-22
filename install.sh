@@ -152,15 +152,13 @@ if [ -f /etc/dsh-app/runtime.json ]; then
   say "  $NATIVE"
   say ""
 
-  case "$HERE" in
-    /tmp/*|/var/tmp/*|/dev/shm/*) COPY=1 ;;
-    *) COPY=0 ;;
-  esac
-  if [ "$COPY" = "1" ]; then
-    say "  仓库在临时目录（$HERE），这次改用复制——软链指着临时目录，"
-    say "  临时目录一清就会全部悬空，App 会因此起不来。"
-    say ""
-  fi
+  # 一律复制，不做软链。
+  #
+  # 以前的实现是软链到仓库——好处是 git pull 之后插件自动就是新的。
+  # 代价太大：仓库目录一被删/一被移走，11 条软链全悬空，App 启动时读不到
+  # LICENSE 就把整个 runtime 拉黑，侧边栏全灰、App 内终端点不开，
+  # 普通用户唯一的出路是重装 App，历史对话全丢。
+  # 复制只需要 1.1 MB，换来的是「仓库没了也照常启动」。
 
   rm -rf "$NEW"
   mkdir -p "$NEW" || die "建不了临时目录：$NEW"
@@ -171,11 +169,7 @@ if [ -f /etc/dsh-app/runtime.json ]; then
       FAILED="$FAILED $f(源里没有)"
       continue
     fi
-    if [ "$COPY" = "1" ]; then
-      cp -R "$HERE/$f" "$NEW/$f" 2>/dev/null
-    else
-      ln -sf "$HERE/$f" "$NEW/$f" 2>/dev/null
-    fi
+    cp -R "$HERE/$f" "$NEW/$f" 2>/dev/null
     if [ -r "$NEW/$f" ]; then
       LINKED=$((LINKED+1))
     else
@@ -200,12 +194,11 @@ if [ -f /etc/dsh-app/runtime.json ]; then
   fi
   rm -rf "$OLD"
 
-  say "  ✔ $LINKED 项就位（$([ "$COPY" = "1" ] && printf 复制 || printf 软链)）"
-  if [ "$COPY" = "0" ]; then
-    say ""
-    say "  每一项都是软链，所以以后 git pull 更新仓库，原生界面跟着变，"
-    say "  不用再单独同步 package.json 里的 dshGo 清单。"
-  fi
+  say "  ✔ $LINKED 项就位（复制，共约 1.1 MB）"
+  say ""
+  say "  这里是一份完整副本，不是指向仓库的快捷方式——仓库以后被删、被移走，"
+  say "  这个目录仍然完整，App 照常启动。代价是 git pull 之后要再同步一次；"
+  say "  点面板上的「更新」会自动做这件事。"
   say ""
 else
   say "（这台机器没有 dsh-go 桥接，跳过原生界面目录）"
