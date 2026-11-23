@@ -127,7 +127,7 @@ P=$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge) && cd "$P" && git
 **连不上 GitHub 时**（报 `Failed to connect` / `Could not resolve host`），把 `git pull` 换成归档下载：
 
 ```sh
-P=$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge) && cd "$P" && curl -L https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main | tar xz --strip-components=1 -C . && sh install.sh
+P=$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge) && cd "$P" && node --input-type=module -e "import fs from 'node:fs'; const b = await fetch('https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main').then(r=>r.arrayBuffer()); fs.writeFileSync('/tmp/dsh-purge.tgz', Buffer.from(b))" && tar xzf /tmp/dsh-purge.tgz --strip-components=1 -C . && rm -f /tmp/dsh-purge.tgz && sh install.sh
 ```
 
 **提醒一句**：归档下载会覆盖工作区文件，仓库里有自己改过的东西（`git status` 不干净）就先 `git stash`，不然会被冲掉。
@@ -139,7 +139,7 @@ P=$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge) && cd "$P" && cur
 卡住不动、或报 `Failed to connect` / `Could not resolve host`：换成下面这条，它走 `codeload.github.com`——GitHub 的下载专用域名，有时比 `git clone` 通得快。
 
 ```sh
-curl -L https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main | tar xz && cd dsh-purge-go-main && sh install.sh
+node --input-type=module -e "import fs from 'node:fs'; const b = await fetch('https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main').then(r=>r.arrayBuffer()); fs.writeFileSync('/tmp/dsh-purge.tgz', Buffer.from(b))" && mkdir -p dsh-purge-go-main && tar xzf /tmp/dsh-purge.tgz --strip-components=1 -C dsh-purge-go-main && rm -f /tmp/dsh-purge.tgz && cd dsh-purge-go-main && sh install.sh
 ```
 
 效果和上一条一样，只是解开的目录叫 `dsh-purge-go-main` 而不是 `dsh-purge-go`。

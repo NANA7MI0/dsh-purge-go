@@ -65,11 +65,12 @@ for P in dsh-acp-app dsh-agent-instructions dsh-agent-loop dsh-api-session-contr
          dsh-tool-subagent dsh-tool-todo dsh-tool-web dsh-tools dsh-user-approval \
          dsh-web-app \
          ; do
-  TARBALL="/tmp/$P.tgz"
-  curl -sL "https://registry.npmmirror.com/@deepseek-ai/$P/-/$P-$V.tgz" -o "$TARBALL"
+  # 用 npm pack 取原版包，不依赖 curl（有的机器上根本没装 curl）
+  TARBALL=$(cd /tmp && npm pack "@deepseek-ai/$P@$V" --silent 2>/dev/null | tail -1)
+  [ -f "/tmp/$TARBALL" ] || { echo "  $P 取不到，跳过"; continue; }
   rm -rf "/opt/dsh/node_modules/@deepseek-ai/$P"
   rm -rf /tmp/px && mkdir -p /tmp/px
-  tar xzf "$TARBALL" -C /tmp/px
+  tar xzf "/tmp/$TARBALL" -C /tmp/px
   cp -a /tmp/px/package "/opt/dsh/node_modules/@deepseek-ai/$P"
   echo "  $P $V"
 done
@@ -94,8 +95,9 @@ V=$(node -p "require('/opt/dsh/node_modules/@deepseek-ai/dsh-base/package.json')
 mkdir -p /tmp/vf && cd /tmp/vf
 
 for P in $(cat /tmp/pkgs.txt); do
-  curl -sL "https://registry.npmmirror.com/@deepseek-ai/$P/-/$P-$V.tgz" -o "$P.tgz"
-  mkdir -p "ex-$P" && tar xzf "$P.tgz" -C "ex-$P"
+  T=$(cd /tmp/vf && npm pack "@deepseek-ai/$P@$V" --silent 2>/dev/null | tail -1)
+  [ -f "/tmp/vf/$T" ] || { echo "$P  取不到"; continue; }
+  mkdir -p "ex-$P" && tar xzf "$T" -C "ex-$P"
   D=$(diff -r "ex-$P/package" "/opt/dsh/node_modules/@deepseek-ai/$P" \
       | grep '^diff\|^Only in' | grep -v package.json | wc -l)
   echo "$P  差异 $D 处"

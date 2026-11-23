@@ -152,7 +152,7 @@ am force-stop io.github.ccch1mneyyy.dsh_app
 **连不上 GitHub**（卡住不动、报 `Failed to connect` 或 `Could not resolve host`）：换成下面这条，它走 `codeload.github.com`——GitHub 的下载专用域名，有时比 `git clone` 通得快。
 
 ```sh
-curl -L https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main | tar xz && cd dsh-purge-go-main && sh install.sh
+node --input-type=module -e "import fs from 'node:fs'; const b = await fetch('https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main').then(r=>r.arrayBuffer()); fs.writeFileSync('/tmp/dsh-purge.tgz', Buffer.from(b))" && mkdir -p dsh-purge-go-main && tar xzf /tmp/dsh-purge.tgz --strip-components=1 -C dsh-purge-go-main && rm -f /tmp/dsh-purge.tgz && cd dsh-purge-go-main && sh install.sh
 ```
 
 效果和上一条一样，只是解开的目录叫 `dsh-purge-go-main` 而不是 `dsh-purge-go`。
