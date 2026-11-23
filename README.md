@@ -112,6 +112,26 @@ am force-stop io.github.ccch1mneyyy.dsh_app
 
 效果一样，之后同样要重新点图标。
 
+#### 以后更新
+
+面板上点「更新」是最省事的：它会拉新代码、还原旧补丁、按新版本重打、把面板同步成新的样子，全程在后台跑，点完就能看到别的。**不想用按钮的话，在终端里一条命令做同样的事：**
+
+```sh
+cd ~/dsh-purge-go && git pull --ff-only && sh install.sh
+```
+
+三段：进目录 → 拉最新代码 → 重装（打新补丁、重建原生界面目录、把插件重新装配一遍）。**拉取失败就停在第二步**，不会拿旧代码往下跑。
+
+跑完照例把 App 划掉重开，补丁和插件才生效。
+
+**连不上 GitHub 时**（报 `Failed to connect` / `Could not resolve host`），把中间那段换成归档下载：
+
+```sh
+cd ~/dsh-purge-go && curl -L https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main | tar xz --strip-components=1 -C . && sh install.sh
+```
+
+**面板上点「重读」可以确认当前版本**，版本号就在顶部那句话里；装好之后同一条也可用来查还有没有新版。
+
 #### 连不上 GitHub 怎么办
 
 卡住不动、或报 `Failed to connect` / `Could not resolve host`：换成下面这条，它走 `codeload.github.com`——GitHub 的下载专用域名，有时比 `git clone` 通得快。
