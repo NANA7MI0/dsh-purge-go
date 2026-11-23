@@ -46,7 +46,7 @@ README 现在只有 9 章，从「它是什么」一路读到「来源」即可�
 ```
 docs/             截图 3 张（panel-status.jpg 面板 · app-all-features.jpg 与 app-terminal.jpg 安装步骤）
                   + 说明 8 份（install / tools / patches / states / restore / troubleshooting / structure / redteam）
-lib/              注入层与原生界面：19 个 .js 模块 + 1 个数据文件（早期部分模块来自 LanJinGod，其余是本仓库加的）
+lib/              注入层与原生界面：22 个 .js 模块 + 1 个数据文件（早期部分模块来自 LanJinGod，其余是本仓库加的）
   asset-table.json  正文密文（原始 md 不进仓库，解出来的办法见 docs/tools.md）
 assets/           categories.json（题材分类出厂值）
 patches/          patches.json（86 条）
