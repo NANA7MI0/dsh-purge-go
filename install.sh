@@ -379,11 +379,28 @@ if PLUGIN_OUT=$(dsh plugin --profile "$PROFILE" add "$HERE" 2>&1); then
   PLUGIN_OK=1
 else
   printf '%s\n' "$PLUGIN_OUT" | sed 's/^/  /'
-  # 返回非零不一定是真失败（旧版上装配会掐断命令）；别让用户盲目重装，先核对。
+  # 返回非零不一定是真失败。实测最常见的原因是 dsh-atomic-write 的写锁超时
+  # （另一个进程正持有锁，pnpm add 拿不到），而依赖其实已经写进 profile 了。
+  # 与其让用户自己去敲命令核对，不如这里直接读一次 profile。
+  DEP_LINE=$(node -e '
+    try {
+      const h = (process.env.DSH_HOME || process.env.HOME + "/.dsh")
+      const j = require(h + "/profiles/web/package.json")
+      const v = j && j.dependencies && j.dependencies["dsh-go-purge"]
+      if (v) process.stdout.write(String(v))
+    } catch {}
+  ' 2>/dev/null) || DEP_LINE=""
   say ""
-  say "  ⚠ dsh plugin add 返回非零——先别重装，核对一下是不是已经装上了："
-  say "      node -p 'require(process.env.HOME+\"/.dsh/profiles/web/package.json\").dependencies[\"dsh-go-purge\"]'"
-  say "    有输出就说明装上了；没有才是真失败。"
+  if [ -n "$DEP_LINE" ]; then
+    # 装上了：装配那一步被锁挡了，重启后生效。别让用户去重装。
+    say "  ⚠ 装配那一步失败了（多半是写锁超时），但插件已经在 profile 里（$DEP_LINE）"
+    say "    重启 App 一次让它装配上，不用重跑本脚本。"
+    PLUGIN_OK=1
+  else
+    PLUGIN_FAILED=1
+    say "  ⚠ dsh plugin add 失败了，profile 里也确实没有——真没装上。"
+    say "    常见原因是另一个进程正占着写锁。等十几秒重跑一次：cd $HERE && sh install.sh"
+  fi
   say ""
 fi
 
@@ -403,9 +420,11 @@ say "═════════════════════════
 say ""
 if [ "${PLUGIN_OK:-0}" = "1" ]; then
   say "  注入层  ✔ 插件加载时自动落盘正文并开启"
+elif [ "${PLUGIN_FAILED:-0}" = "1" ]; then
+  say "  注入层  ✖ 插件没装上，注入层不会生效"
+  say "           等十几秒重跑一次：cd $HERE && sh install.sh"
 else
-  say "  注入层  ? 取决于插件有没有真装上——按上面那条命令核对"
-  say "           有输出 = 装上了，注入层重启后就会生效；没有 = 重跑本脚本"
+  say "  注入层  ? 取决于插件有没有真装上——按上面的提示处理"
 fi
 # 收尾这句必须跟上面实际做的事一致：
 #   --plugin-only        → 本来就没打
