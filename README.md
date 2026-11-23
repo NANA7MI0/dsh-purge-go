@@ -76,7 +76,7 @@ root@localhost:~/workspace#
 **第 1 条：安装**
 
 ```sh
-git clone https://github.com/NANA7MI0/dsh-purge-go ~/dsh-purge-go && cd ~/dsh-purge-go && sh install.sh
+git clone https://github.com/NANA7MI0/dsh-purge-go ~/dsh-purge-go && cd "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)" && sh install.sh
 ```
 
 三件事串在一起：下载仓库 → 进入目录 → 跑安装脚本。**前一步成功了才往下走**，所以中途出错不会在错误的目录里继续乱跑。
@@ -147,7 +147,7 @@ curl -L https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main
 **报 `destination path already exists`**：说明 `~/dsh-purge-go` 已经在了，之前装过。不用删，直接跑这条（跳过下载，只跑安装；脚本是幂等的，装过再跑一遍也不会出问题）：
 
 ```sh
-cd ~/dsh-purge-go && sh install.sh
+cd "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)" && sh install.sh
 ```
 
 #### install.sh 到底做了什么
@@ -325,7 +325,7 @@ cat ~/.dsh/dsh-purge/state.json            # 应该有 "enabled": true
 修复：说一句「重打补丁」让插件调 `purge_patch_apply`，或者手动跑：
 
 ```sh
-cd ~/dsh-purge-go
+cd "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)"
 node patches/purge-patch.mjs probe           # 先看命中率
 node patches/purge-patch.mjs apply           # 再打
 am force-stop io.github.ccch1mneyyy.dsh_app  # 重启才生效
@@ -338,7 +338,7 @@ am force-stop io.github.ccch1mneyyy.dsh_app  # 重启才生效
 **③ App 起不来（反复报 `start failed: ...dsh-go-purge/LICENSE`，连安全模式都救不回，App 内的终端也点不开）。** 0.6.8 起不会再进这个状态（原生界面目录改成独立副本，且装的时候先建到临时目录、全部校验通过才替换）。已经中招、但还能打开终端的话，一条命令修回来：
 
 ```sh
-cd ~/dsh-purge-go && sh install.sh --repair-native
+cd "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)" && sh install.sh --repair-native
 ```
 
 终端也点不开的三种救法（电脑 + USB / 手机有 root / 只能重装）见 [出问题时自查](docs/troubleshooting.md#app-起不来的时候怎么救)。
@@ -364,7 +364,7 @@ cd ~/dsh-purge-go && sh install.sh --repair-native
 
 ```sh
 # ① 还原补丁层（最容易漏，也最重要）
-cd ~/dsh-purge-go
+cd "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)"
 # 备份在哪取决于你怎么装的：install.sh 装 → ~/.dsh/dsh-purge/patch-backup/<时间戳>
 #                             手动 CLI 打 → ./backup-<时间戳>
 ls -d ~/.dsh/dsh-purge/patch-backup/* ./backup-* 2>/dev/null
@@ -375,7 +375,7 @@ node patches/purge-patch.mjs restore --backup <上面列出的那一批>
 dsh plugin --profile web remove dsh-go-purge
 
 # ③ 删插件自己的文件
-rm -rf ~/dsh-purge-go
+rm -rf "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)"
 rm -rf ~/.dsh/prompt-inject.md ~/.dsh/dsh-purge
 rm -rf ~/.dsh/profiles/web/node_modules/dsh-go-purge
 
@@ -421,7 +421,7 @@ ls ~/.dsh/dsh-go/plugins/ 2>/dev/null    # 没有 dsh-go-purge 就算干净
   （手动跑 `node patches/purge-patch.mjs apply` 且没传 `--backup` 时，备份落在仓库根的 `backup-<时间戳>/`。那份**不会**被自动清理，属于你自己的数据，不想要就手动删。）
 
   ```sh
-  cd ~/dsh-purge-go
+  cd "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)"
   node patches/purge-patch.mjs restore --backup ~/.dsh/dsh-purge/patch-backup/<唯一那一批>
   ```
 

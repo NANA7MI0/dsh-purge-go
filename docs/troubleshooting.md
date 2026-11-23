@@ -73,7 +73,7 @@
 **已经中招、但 App 还能打开终端的话**，一条命令修回来：
 
 ```sh
-cd ~/dsh-purge-go && sh install.sh --repair-native
+cd "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)" && sh install.sh --repair-native
 ```
 
 ## 升级引擎 / 更新 App 之后
@@ -102,7 +102,7 @@ cd ~/dsh-purge-go && sh install.sh --repair-native
 **修复**：说一句「重打补丁」让插件调 `purge_patch_apply`，或者手动跑:
 
 ```sh
-cd ~/dsh-purge-go && node patches/purge-patch.mjs apply
+cd "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)" && node patches/purge-patch.mjs apply
 am force-stop io.github.ccch1mneyyy.dsh_app   # 重启才生效
 ```
 
