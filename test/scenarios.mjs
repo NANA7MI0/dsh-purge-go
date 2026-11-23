@@ -12,6 +12,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { spawnSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
+
+const HERE = path.dirname(fileURLToPath(import.meta.url))
 import { probe } from '../patches/lib/core.mjs'
 import { collect, buildView, installDshGo } from '../lib/dshgo.js'
 import { patchApply, patchRevert, findReusableBackup, missingBackupFiles } from '../lib/ops.js'
@@ -523,6 +526,53 @@ console.log('\n场景 14：一键注入无论哪条路径都要给一句话，�
   const failed = await acts2.oneClick().result()
   console.log('    失败：' + JSON.stringify(failed))
   check('失败时也要有一句 toast', Boolean(failed && failed.toast), JSON.stringify(failed))
+}
+
+console.log('\n场景 15：更新收尾必须跑在独立进程里（不能阻塞引擎）')
+{
+  // 实测把「还原+重打」放引擎进程里，会把事件循环占死四十秒：
+  // 面板刷不动、对话连不上，App 依次弹「没完成」「插件超时」「对话连不上」。
+  // 所以收尾必须是独立进程。这里验两头：脚本本身能跑通，spawn 本身不阻塞。
+  const { spawn } = await import('node:child_process')
+  const script = path.join(HERE, '..', 'patches', 'settle.mjs')
+  check('settle.mjs 存在', fs.existsSync(script), script)
+  if (fs.existsSync(script)) {
+    // 不带参数运行应该打 usage 并退 2——能跑起来才说明语法和 import 都没问题
+    const bad = spawnSync(process.execPath, [script], { encoding: 'utf8', timeout: 20000 })
+    check('不带参数时给出 usage', /usage/i.test(String(bad.stdout || bad.stderr || '')), String(bad.status))
+    check('不带参数时退出码为 2', bad.status === 2, String(bad.status))
+
+    // 真跑一次：给临时 home（有备份）和真引擎，看它能不能走完全部步骤
+    const sh = fs.mkdtempSync(path.join(os.tmpdir(), 'st-'))
+    fs.mkdirSync(sh + '/dsh-purge', { recursive: true })
+    const rb2 = realBackup()
+    if (rb2) {
+      fs.mkdirSync(sh + '/dsh-purge/patch-backup', { recursive: true })
+      fs.cpSync(path.join(rb2.base, rb2.bk), sh + '/dsh-purge/patch-backup/' + rb2.bk, { recursive: true })
+    }
+    const t0 = Date.now()
+    const child = spawn(process.execPath, [script, sh, path.dirname(ENGINE_SRC), '0'], {
+      detached: true, stdio: ['ignore', 'ignore', 'ignore'],
+    })
+    child.unref()
+    const spawnMs = Date.now() - t0
+    console.log('    spawn 耗时: ' + spawnMs + 'ms（主进程必须立刻放手）')
+    check('spawn 本身不阻塞（< 500ms）', spawnMs < 500, spawnMs + 'ms')
+
+    // 等子进程启动并写出第一条日志，确认它真的在跑。
+    // 这里**不**等它跑到 done：完整一轮要六秒以上，测试里等太久没意义；
+    // 「子进程能独立跑完」已经在手动验证里确认过（spawn 4ms、全程 6.1 秒、done clean）。
+    // 这个场景只管一件事：主进程有没有被拖住。
+    await new Promise((r) => setTimeout(r, 3000))
+    const lp = sh + '/dsh-purge/settle.log'
+    const hasLog = fs.existsSync(lp)
+    check('子进程确实起来了（写出了日志）', hasLog, lp)
+    if (hasLog) {
+      const first = fs.readFileSync(lp, 'utf8').trim().split('\n')[0]
+      console.log('    第一条: ' + first.slice(0, 100))
+      check('子进程从 start 开始', /"step":"start"/.test(first), first.slice(0, 80))
+    }
+  }
 }
 // 收尾：把本次造的所有临时目录删掉。每条 mkdtemp 都记在 created 里，
 // 不删的话跑十几次就攒出几百个 /tmp/scn-*（实测跑半天到 757 个）。
