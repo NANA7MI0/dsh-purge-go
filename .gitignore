@@ -1,0 +1,13 @@
+node_modules/
+backup-*/
+patch-probe.json
+*.log
+.DS_Store
+patches.bak-*
+
+# 明文正文不进仓库——仓库里只有打包产物 lib/asset-table.js。
+# 改正文：编辑这个文件 → node scripts/embed-default-prompt.mjs
+assets/default-prompt.md
+
+# npm pack 产物，别提交
+*.tgz
