@@ -13,7 +13,7 @@ import path from 'node:path'
 import os from 'node:os'
 import { spawnSync } from 'node:child_process'
 import { probe } from '../patches/lib/core.mjs'
-import { collect, buildView } from '../lib/dshgo.js'
+import { collect, buildView, installDshGo } from '../lib/dshgo.js'
 import { patchApply, patchRevert, findReusableBackup, missingBackupFiles } from '../lib/ops.js'
 
 let pass = 0
@@ -470,6 +470,59 @@ console.log('\n场景 13：目标文件被删掉时，不许短路（否则永�
     check('有目标缺失时不许短路', r2.upToDate !== true, String(r2.upToDate))
     check('文件被补回来了', fs.existsSync(victim), '补不回来会一直缺')
   }
+}
+
+console.log('\n场景 14：一键注入无论哪条路径都要给一句话，不许静默')
+{
+  // 用户报「点注入有时跳提示有时不跳」。根因是 deferred 的 result 在 signal.aborted 时
+  // 返回了空对象 {}——补丁其实打完了，但用户一个字都看不到。慢的那次更容易被 abort，
+  // 所以表现成「时灵时不灵」。这里把四条路径都验一遍：正常、无 signal、已取消、失败。
+  const rows = []
+  const T = fs.mkdtempSync(path.join(os.tmpdir(), 'tt-'))
+  fs.cpSync(ENGINE_SRC, T, { recursive: true })
+  const H = tmp('tth-')
+  fs.mkdirSync(H + '/dsh-purge', { recursive: true })
+  fs.writeFileSync(H + '/dsh-purge/state.json', JSON.stringify({ enabled: true }))
+
+  let acts = null
+  const go = {
+    strip: (i, f) => { f('s', () => {}); return () => {} },
+    panel: (i, spec) => { spec.view(); spec.data('p', () => {}); acts = spec.actions; return () => {} },
+  }
+  installDshGo(
+    { get: (n) => (n === 'dshGo' ? go : null), effect: (f) => f(), on: () => {}, emit: () => {} },
+    { home: H, config: { aiRoot: T }, warn: () => {} },
+  )
+
+  const normal = await acts.oneClick().result()
+  rows.push(['正常', normal])
+  const noSignal = await acts.oneClick().result(undefined)
+  rows.push(['无 signal', noSignal])
+  const ac = new AbortController()
+  ac.abort()
+  const aborted = await acts.oneClick().result(ac.signal)
+  rows.push(['已取消', aborted])
+
+  for (const [k, v] of rows) {
+    console.log('    ' + k + '：' + JSON.stringify(v))
+    check(k + ' 要有一句 toast', Boolean(v && typeof v.toast === 'string' && v.toast.length > 0), JSON.stringify(v))
+  }
+
+  // 补丁失败也要有 toast
+  const badRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'ttb-'))
+  fs.mkdirSync(path.join(badRoot, 'dsh-base'), { recursive: true })
+  fs.writeFileSync(path.join(badRoot, 'dsh-base', 'package.json'), JSON.stringify({ version: '9.9.9-x' }))
+  const H2 = tmp('tth2-')
+  fs.mkdirSync(H2 + '/dsh-purge', { recursive: true })
+  let acts2 = null
+  const go2 = { strip: (i, f) => { f('s', () => {}); return () => {} }, panel: (i, s) => { s.view(); s.data('p', () => {}); acts2 = s.actions; return () => {} } }
+  installDshGo(
+    { get: (n) => (n === 'dshGo' ? go2 : null), effect: (f) => f(), on: () => {}, emit: () => {} },
+    { home: H2, config: { aiRoot: badRoot }, warn: () => {} },
+  )
+  const failed = await acts2.oneClick().result()
+  console.log('    失败：' + JSON.stringify(failed))
+  check('失败时也要有一句 toast', Boolean(failed && failed.toast), JSON.stringify(failed))
 }
 // 收尾：把本次造的所有临时目录删掉。每条 mkdtemp 都记在 created 里，
 // 不删的话跑十几次就攒出几百个 /tmp/scn-*（实测跑半天到 757 个）。
