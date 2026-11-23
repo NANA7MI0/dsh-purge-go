@@ -103,7 +103,7 @@ cd "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)" && sh install.
 
 ```sh
 cd "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)" && node patches/purge-patch.mjs apply
-am force-stop io.github.ccch1mneyyy.dsh_app   # 重启才生效
+# 然后从最近任务里把 App 划掉再打开（am 命令在 proot 里跑不了）
 ```
 
 打之前建议先 `probe` 看一眼。**别急着 `apply`**：

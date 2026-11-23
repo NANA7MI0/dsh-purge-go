@@ -141,9 +141,7 @@ git clone https://github.com/NANA7MI0/dsh-purge-go ~/dsh-purge-go && cd ~/dsh-pu
 
 **想在终端里一条命令搞定也可以**，粘这条回车：
 
-```sh
-am force-stop io.github.ccch1mneyyy.dsh_app
-```
+**从最近任务里把 App 划掉再打开。**
 
 效果一样，之后同样要重新点图标。
 
@@ -284,7 +282,7 @@ app 读到的还是老清单，于是胶囊点开没有面板、或者面板报�
 
 ```sh
 cd "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)" && git pull && sh install.sh
-am force-stop io.github.ccch1mneyyy.dsh_app
+# 然后从最近任务里把 App 划掉再打开
 ```
 
 **不用担心的几件事**（跨版本都兼容）：
@@ -304,9 +302,7 @@ Android 上没有服务管理，把进程杀掉再开就是这个效果。**关�
 
 **在终端里用命令也行：**
 
-```sh
-am force-stop io.github.ccch1mneyyy.dsh_app
-```
+**从最近任务里把 App 划掉再打开。**
 
 效果一样，之后同样要重新点图标。
 

@@ -104,13 +104,7 @@ git clone https://github.com/NANA7MI0/dsh-purge-go ~/dsh-purge-go && cd ~/dsh-pu
 
 **关键是第 2 步要划掉**——只按返回键退到桌面不算，那样界面收起来了、引擎还在后台跑，补丁不生效。
 
-**想在终端里一条命令搞定也可以**，粘这条回车：
-
-```sh
-am force-stop io.github.ccch1mneyyy.dsh_app
-```
-
-效果一样，之后同样要重新点图标。
+**没有别的办法。** `am force-stop` 这类 Android 命令在 proot 里跑不了（会报 `cmd: inaccessible or not found`），划掉 App 是唯一可靠的重启方式。
 
 #### 以后更新
 
@@ -176,11 +170,7 @@ cd ~/dsh-purge-go && sh install.sh
 
 补丁要重启引擎才生效。**不用敲命令：从屏幕最底下往上划一下，把 App 的卡片划掉，再点图标打开即可。** Android 上没有服务管理，把进程杀掉再开就是这个效果。**关键是「划掉」**——只按返回键退到桌面不算，那样界面收起来了、引擎还在内存里跑着，插件不会重新加载。
 
-终端里用命令也行，效果一样，之后同样要重新点图标：
-
-```sh
-am force-stop io.github.ccch1mneyyy.dsh_app
-```
+**划掉这一步没有替代品。** Android 的 `am` 命令在 proot 里调不到（报 `cmd: inaccessible or not found`），所以只能靠划掉。
 
 ---
 
@@ -330,7 +320,7 @@ cat ~/.dsh/dsh-purge/state.json            # 应该有 "enabled": true
 cd "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)"
 node patches/purge-patch.mjs probe           # 先看命中率
 node patches/purge-patch.mjs apply           # 再打
-am force-stop io.github.ccch1mneyyy.dsh_app  # 重启才生效
+# 然后从最近任务里把 App 划掉再打开（am 命令在 proot 里跑不了）
 ```
 
 命中率低说明查找串对不上，这种情况下 `apply` 会全部落空、文件不改（先 `probe` 看一遍即可）。
@@ -387,7 +377,7 @@ rm -rf ~/.dsh/prompt-inject.md ~/.dsh/dsh-purge
 rm -rf ~/.dsh/dsh-go/plugins/dsh-go-purge
 
 # ⑤ 重启引擎
-am force-stop io.github.ccch1mneyyy.dsh_app
+# 然后从最近任务里把 App 划掉再打开
 ```
 
 **为什么 ① 必须在 ② 之前**：`restore` 要用到仓库里的 `patches/`，删了仓库就没工具还原了。
@@ -434,9 +424,7 @@ ls ~/.dsh/dsh-go/plugins/ 2>/dev/null    # 没有 dsh-go-purge 就算干净
 
 ### 还原后必须重启
 
-```sh
-am force-stop io.github.ccch1mneyyy.dsh_app
-```
+**从最近任务里把 App 划掉再打开。**
 
 **不重启的话，跑着的引擎进程里加载的还是旧代码**，文件改了也白改。
 
