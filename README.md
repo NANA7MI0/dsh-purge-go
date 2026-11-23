@@ -8,7 +8,7 @@
 
 装完输入框上方多一个「破甲状态」胶囊，点它直接打开状态界面；出问题时上方会自己冒一条红色状态条，点它也是进同一个界面。安装时会把 App 自带的「插件」胶囊一并藏起来——那是个插件列表入口，本仓库只有一个插件，点进去是同一个面板，留着只会让人以为装重了。想恢复就删掉 `~/.dsh/dsh-go/ui.json` 里 `hide` 数组的 `pluginCapsule` 一项。
 
-<img src="docs/panel-status.jpg" width="360" alt="破甲状态面板：顶部一句总状态、补丁层 57/57、注入/正文/变体/模型/待办五行、四个按钮、下方明细表">
+<img src="docs/panel-status.jpg" width="360" alt="破甲状态面板：顶部一句总状态、补丁 58/58、四个按钮">
 
 *点胶囊打开的就是这一屏（截图为正常工作状态）*
 
@@ -135,7 +135,7 @@ cd ~/dsh-purge-go && sh install.sh
 **装之前想看一眼的话，就这三点**（不看也能直接跑）：
 
 1. **引擎版本必须是 0.2.x。** 0.3.x 装不上，会直接报 incompatible。要求写在 `package.json` 的 `engines.dsh` 里：`>=0.2.1-rc.2 <0.3.0-0`。查当前版本：`node -p "require('/opt/dsh/node_modules/@deepseek-ai/dsh-base/package.json').version"`。
-2. **手机上没有任何沙箱后端**——bubblewrap、Landlock 在 Android proot 里都不存在，所以安装不经过审批或沙箱流程（原因见[补丁层改了哪两处](#补丁层改了哪两处)）。安装只做文件操作：把补丁写进 39 个引擎包里的**字符串常量**（不改逻辑、不加代码）、复制一份原生界面目录（1.1 MB）、在 profile 里注册插件。
+2. **手机上没有任何沙箱后端**——bubblewrap、Landlock 在 Android proot 里都不存在，所以安装不经过审批或沙箱流程（原因见[补丁层改了哪两处](#补丁层改了哪两处)）。安装只做文件操作：把补丁写进 41 个引擎包里的**字符串常量**（不改逻辑、不加代码）、复制一份原生界面目录（1.1 MB）、在 profile 里注册插件。
 3. **每一步都有备份，一条命令能撤**，见 [6. 卸载与还原](#6-卸载与还原)。
 
 装到哪个目录都行，用 `~`（也就是 `$HOME`）而不是写死 `/root`——dsh-go 跑在 proot 里，`$HOME` 是 `/root`，但这个 root 是 proot 映射出来的**假身份**，真实进程属于 App 的 uid，**不需要任何 root 权限**；在普通 Linux 上 `$HOME` 是 `/home/你的用户名`，写死 `/root` 反而会失败。**但必须是持久目录**：`/tmp` 是内存盘（重启就清空），`/sdcard` 是 FAT32、没有执行位（所以文档统一写 `sh install.sh`，不需要执行权限）。
@@ -256,7 +256,7 @@ cat ~/.dsh/dsh-purge/state.json            # 应该有 "enabled": true
 # 在对话里说「跑 purge_status 看看状态」，它会调工具并把结果读给你
 ```
 
-**最快的一条其实是点胶囊**：输入框上方那个「破甲状态」，点开就是面板，补丁层大数字直接写着 `57/57`，注入层五行也在。不用等 AI、不用敲命令。
+**最快的一条其实是点胶囊**：输入框上方那个「破甲状态」，点开就是面板，补丁层大数字直接写着 `58/58`。不用等 AI、不用敲命令。
 
 ---
 
@@ -266,7 +266,7 @@ cat ~/.dsh/dsh-purge/state.json            # 应该有 "enabled": true
 
 | 工具 | 干什么 |
 |---|---|
-| `purge_status` | **看两层状态**：注入层（开关、正文来源与体积、当前变体、按模型指定、上次组装压掉哪些官方段）+ 补丁层（引擎路径、86 条的生效数与状态分布） |
+| `purge_status` | **看两层状态**：注入层（开关、正文来源与体积、当前变体、按模型指定、上次组装压掉哪些官方段）+ 补丁层（引擎路径、手机适用多少条、已生效多少条、按用途的分布）——和面板同一套口径，面板给结论、工具卡给明细 |
 | `purge_apply` | 重新开启破甲并确保正文存在。**装的时候已经自动做过一次**，只在关掉之后想重开、或正文丢了想补回来时用。`force=true` 覆盖重写 |
 | `purge_revert` | 关闭破甲，把当前正文备份到 `dsh-purge/backups/`（正文本身保留） |
 | `purge_prompt` | 读写注入正文与变体。`show` / `set` / `reset` / `use` / `default` / `map`（按模型指定变体） |
@@ -279,14 +279,12 @@ cat ~/.dsh/dsh-purge/state.json            # 应该有 "enabled": true
 
 点输入框上方的「破甲状态」胶囊，直接打开的就是这一屏。**面板挂在三个地方**（同一份内容）：对话页签、聊天侧栏、App 的功能页，最常用的入口是胶囊。
 
-<img src="docs/panel-status.jpg" width="360" alt="破甲状态面板：顶部一句总状态、补丁层 57/57、注入/正文/变体/模型/待办五行、四个按钮、下方明细表">
+<img src="docs/panel-status.jpg" width="360" alt="破甲状态面板：顶部一句总状态、补丁 58/58、四个按钮">
 
-从上到下四块：
+从上到下三块：
 
 - **一句总结**：一句话概括两层状态，底色会变——正常绿底（「破甲能力完全正常。」）、有补丁没打上变黄、注入关了或补丁层被打穿变红。
-- **补丁层**：一个大数字，比如 `57/57`（分子是本机已生效、分母是**手机适用的条数**，不是全部 86 条）；补丁大面积为未打时显示「未打」，不显示 `2/57` 那种容易误读的数。底下还有一行按实际拼的说明，如 `手机适用 57 条 · 已全部生效 · 另 29 条桌面专属`。
-- **注入层五行**：`注入`（开/关）、`正文`（多少 KB）、`变体`、`模型`（当前模型）、`待办`（`没有要处理的` 或 `N 条要处理`）。
-- **明细表**：按状态分表（可以再打 / 被升级冲掉 / 打不上 / 目标文件缺失 / 部分生效 / 无目标句 / 已生效 / 桌面专属），表头是 `#` / `补丁` / `说明`，说明列给一句「怎么办」；每张表最多列 20 行。
+- **补丁**：一个数字，比如 `58/58`。分母是这台机器上真会被改动的条数（不是全部 86 条），分子是真打完的。大面积为未打时显示「未打」，不显示 `2/58` 那种容易误读的数。想看逐条明细：`node patches/purge-patch.mjs probe`。
 
 **四个按钮**（上限就是四个）：**重读**（重新扫一遍引擎刷新数字）、**一键注入**（先开注入、再顺手打补丁，**最常用**）、**开关注入**（只切注入层）、**还原补丁**（从最近的备份还原引擎文件，不重装引擎包）。面板每 30 秒自己刷新一次，点「重读」可以立刻刷。
 
@@ -313,7 +311,7 @@ am force-stop io.github.ccch1mneyyy.dsh_app  # 重启才生效
 
 命中率低说明查找串对不上，这种情况下 `apply` 会全部落空、文件不改（先 `probe` 看一遍即可）。
 
-**② 看不懂面板上的数字和状态词。** `applied` / `hit` / `partial` / `drifted` / `no_pkg` / `no_needle` 的定义、`partial` 到底要不要管，见 [状态含义](docs/states.md)。判断破甲健不健康**只看 `applied` 的数量**：低于 10 条就判定被覆盖。**别用 `probe` 的数字判断「卸没卸干净」**——原版引擎上本来就有 `applied` 2 条、`hit` 30 条、`partial` 22 条，光看数字像是没卸干净。
+**② 看不懂面板上的数字和状态词。** `applied` / `hit` / `partial` / `drifted` / `no_pkg` / `no_needle` 的定义、`partial` 到底要不要管，见 [状态含义](docs/states.md)。判断破甲健不健康**只看 `applied` 的数量**：低于 10 条就判定被覆盖。**别用 `probe` 的数字判断「卸没卸干净」**——原版引擎上本来就有 `applied` 2 条、`hit` 31 条、`partial` 26 条，光看数字像是没卸干净。
 
 **③ App 起不来（反复报 `start failed: ...dsh-go-purge/LICENSE`，连安全模式都救不回，App 内的终端也点不开）。** 0.6.8 起不会再进这个状态（原生界面目录改成独立副本，且装的时候先建到临时目录、全部校验通过才替换）。已经中招、但还能打开终端的话，一条命令修回来：
 
@@ -348,7 +346,8 @@ cd ~/dsh-purge-go
 # 备份在哪取决于你怎么装的：install.sh 装 → ~/.dsh/dsh-purge/patch-backup/<时间戳>
 #                             手动 CLI 打 → ./backup-<时间戳>
 ls -d ~/.dsh/dsh-purge/patch-backup/* ./backup-* 2>/dev/null
-node patches/purge-patch.mjs restore --backup <上面列出的最后一批>
+# 备份只保留最新一份（每次注入都会清掉旧的），列出来通常只有一条
+node patches/purge-patch.mjs restore --backup <上面列出的那一批>
 
 # ② 从 profile 摘掉插件
 dsh plugin --profile web remove dsh-go-purge
@@ -367,7 +366,7 @@ am force-stop io.github.ccch1mneyyy.dsh_app
 
 **为什么 ① 必须在 ② 之前**：`restore` 要用到仓库里的 `patches/`，删了仓库就没工具还原了。
 
-每一层是什么、漏了会怎样：**补丁层**在 `/opt/dsh/node_modules/@deepseek-ai/` 下 39 个包里（`restore` 撤，漏了 `grep -r dsh-purge` 还能搜到）；**注入层**是 `~/.dsh/prompt-inject.md`（删文件，漏了每次开对话都往系统提示里塞正文）；**插件注册**在 `~/.dsh/profiles/web/package.json`（`dsh plugin remove`，漏了重启后插件又加载回来）；**插件文件**是仓库目录与 `node_modules` 软链（`rm -rf`）；**原生界面目录**是 `~/.dsh/dsh-go/plugins/dsh-go-purge/`（删掉不影响 App 启动）。
+每一层是什么、漏了会怎样：**补丁层**在 `/opt/dsh/node_modules/@deepseek-ai/` 下 41 个包里（`restore` 撤，漏了 `grep -r dsh-purge` 还能搜到）；**注入层**是 `~/.dsh/prompt-inject.md`（删文件，漏了每次开对话都往系统提示里塞正文）；**插件注册**在 `~/.dsh/profiles/web/package.json`（`dsh plugin remove`，漏了重启后插件又加载回来）；**插件文件**是仓库目录与 `node_modules` 软链（`rm -rf`）；**原生界面目录**是 `~/.dsh/dsh-go/plugins/dsh-go-purge/`（删掉不影响 App 启动）。
 
 **怎么确认真的卸干净**（逐项核对，都不输出即为干净）：
 
@@ -393,18 +392,19 @@ ls ~/.dsh/dsh-go/plugins/ 2>/dev/null    # 没有 dsh-go-purge 就算干净
 
 ### 还原引擎：有备份 / 备份没了
 
-补丁打的是 39 个包，还原取决于你手上还有没有 `apply` 时的备份。
+补丁打的是 41 个包，还原取决于你手上还有没有 `apply` 时的备份。
 
-- **有备份**：`apply` 每次生成一个 `backup-<时间戳>/files/`（CLI 跑在仓库目录，`install.sh` 装的在 `~/.dsh/dsh-purge/patch-backup/`），里面是被改过文件的原始副本。按时间倒序撤（后打的先撤）：
+- **有备份**：备份在 `~/.dsh/dsh-purge/patch-backup/<时间戳>/files/`，里面是被改过文件的原始副本。**这个目录只保留最新一份**：每次注入前会先把引擎还原成原始状态、再重建备份，然后清掉旧目录——所以列表里通常只有一条，直接还原它就行，不用挑批次。
+
+  （手动跑 `node patches/purge-patch.mjs apply` 且没传 `--backup` 时，备份落在仓库根的 `backup-<时间戳>/`。那份**不会**被自动清理，属于你自己的数据，不想要就手动删。）
 
   ```sh
   cd ~/dsh-purge-go
-  node patches/purge-patch.mjs restore --backup ./backup-<最后一批>
-  node patches/purge-patch.mjs restore --backup ./backup-<更早一批>
+  node patches/purge-patch.mjs restore --backup ~/.dsh/dsh-purge/patch-backup/<唯一那一批>
   ```
 
-  同一文件可能被多批补丁动过，先撤早的会被后撤的覆盖，最后停在混合状态——所以要倒序全跑完。还原前会核对引擎版本（备份里记着 `engine.version`），版本换过会拒绝，这不是多此一举：把旧版引擎的文件写进新版里，轻则补丁失效、重则引擎起不来。
-- **备份没了**：把原版包重新装回来——按 `/opt/dsh/package-lock.json` 跑 `cd /opt/dsh && npm install --force`（不需要知道哪些包被改过），或者只重装被改的那 39 个包。完整脚本、逐字节比对验证、备份版本核对见 [还原引擎](docs/restore.md)。
+  还原前会核对引擎版本（备份里记着 `engine.version`），版本换过会拒绝——把旧版引擎的文件写进新版里，轻则补丁失效、重则引擎起不来。
+- **备份没了**：把原版包重新装回来——按 `/opt/dsh/package-lock.json` 跑 `cd /opt/dsh && npm install --force`（不需要知道哪些包被改过），或者只重装被改的那 41 个包（47 个文件）。完整脚本、逐字节比对验证、备份版本核对见 [还原引擎](docs/restore.md)。
 
 ### 还原后必须重启
 

@@ -84,6 +84,43 @@ export function relOf(p) {
 }
 
 /**
+ * 一条补丁要改哪些文件，统一成 [{ pkg, rel }] 列表。
+ *
+ * 两种写法，**有 targets 就完全不用 file/rel**——不是合并，是取代：
+ *  - p.targets = [{ pkg, rel }]：同一个包里改多个不同文件时用
+ *    （dsh-web-app/presets/ 下 standard、ptc、cordis 各要改一句）。
+ *    老写法只能表达「几个候选包 + 同一个包内路径」，表达不了这种。
+ *  - p.file + p.rel：绝大多数补丁仍是这个，路径与改前逐字等价。
+ *
+ * 取代是有代价的，写 targets 时要想清楚原来那份 file 列表还覆盖了哪些文件。
+ * id 63 踩过一次：原本写 base / preset-ptc / preset-standard / preset-cordis，
+ * 加 targets 时只列了三个 preset，base 就这么被静默丢掉了。当时判断「base 那段
+ * 会被 preset 整行覆盖、改它没用」——**这个判断是错的**：headless profile 的
+ * bundles 只有 dsh-base + dsh-headless，根本不加载 web-app 的 preset，
+ * 它读的就是 base 里那份 plan-mode 文案。现在 base 已经加回 targets，
+ * 一共四个文件（base + standard + ptc + cordis）；minimal 预设本来就没有计划模式，不在此列。
+ *
+ * targets 项里没写 rel 的退回 relOf(p)；没写 pkg 的项跳过。
+ */
+export function targetsOf(p, pkgs) {
+  if (Array.isArray(p.targets) && p.targets.length > 0) {
+    const out = [];
+    for (const t of p.targets) {
+      if (!t || typeof t.pkg !== "string" || !t.pkg) continue;
+      // 包不存在就跳过这一项，别把它当成「有这个包、只是文件不在」。
+      // 不跳的话 status 会从 no_pkg 变成 no_file，被算进面板的 applicable 分母，
+      // 用户看到一条永远消不掉的待办（id 43/63 在没装 dsh-web-app 的引擎上就是这样）。
+      if (Array.isArray(pkgs) && pkgs.length > 0 && !pkgs.includes(t.pkg)) continue;
+      const rel = Array.isArray(t.rel) ? t.rel : typeof t.rel === "string" ? t.rel.split("/").filter(Boolean) : relOf(p);
+      out.push({ pkg: t.pkg, rel });
+    }
+    if (out.length) return out;
+  }
+  const rel = relOf(p);
+  return candidatesFor(p, pkgs).map((pkg) => ({ pkg, rel }));
+}
+
+/**
  * 把 patches.json 里的一条 replacement 转成内部 edit 对象。
  *
  * pattern 有两种写法：
@@ -143,40 +180,20 @@ export function marked(p, text) {
   // 所以这个开关从来没有存在意义。留着这行是为了兼容将来真写成数组的情况。
   if (Array.isArray(p.markersAny)) ms.push(...p.markersAny);
   if (typeof p.marker === "string") ms.push(p.marker);
-  // forbid 在数据里全是数组（6 条），原来只认字符串，等于这 6 条保护从未生效。
-  if (typeof p.forbid === "string") ms.push(p.forbid);
-  else if (Array.isArray(p.forbid)) for (const f of p.forbid) if (typeof f === "string") ms.push(f);
+  // forbid 不是身份标记，这里不参与判断——把它当 marker 会把结论推反（本该判 hit 却判
+  // drifted，面板挂一条假的「被覆盖」）。
+  // 它的内容两类都有：60/61 是「打补丁前的原始文案」，40/69/85/86 是「另一变体打出来的产物」。
+  // 两种都只说明「当前是不是目标状态」，不能说明「是不是我们打的」，所以都不该进 marked()。
   return ms.some((m) => typeof m === "string" && m.length > 3 && text.includes(m));
 }
 
-/**
- * 数据里那几个执行器不读的字段，语义与现状（别再照着字段改行为，会白改）：
- *
- *  - markersAny  布尔 true。markers 本身已是「任一命中」，这个开关多余。
- *  - skipIfMarked 34 条。本意「文件已有 marker 就跳过这条」，但一个文件常有多条补丁，
- *                 按文件跳过会连别的补丁一起漏掉，所以执行器故意不实现。
- *  - optional    47 条。本意「打不上不算失败」。现在 no_pkg（包不存在）本来就不判失败，
- *                 效果已达成，字段冗余。
- *  - strictFiles  3 条 / softSettle 2 条。早期设想的「严格/宽松判定」，从未实现。
- *  - surfaces     7 条（全是 ["desktop"]）。桌面专属标记。目前靠 no_pkg 兜住，
- *                 但如果某台机器装了这个包，这几条会被当成手机端补丁去打。
- *  - broken       3 条（#3/#73/#77）。已知打不上，见下面 apply 里的跳过。
- */
+// 下列字段执行器不读，别照着它们改行为：markersAny（布尔，markers 已是任一命中）、
+// skipIfMarked（按文件跳过会连别的补丁一起漏）、optional（no_pkg 已不判失败）、
+// strictFiles / softSettle（从未实现）、surfaces（桌面专属，靠 no_pkg 兜住）、
+// broken（#3/#73/#77 已知打不上，apply 里显式跳过）。
 
-/**
- * 逐补丁扫盘判定。
- * @returns {Array<{id,name,status,pkg?,file?,hits?,total?,targets?,files?}>}
- * status: applied | hit | partial | miss | no_needle | no_file | no_pkg
- */
-/**
- * 这条 replacement 是否已经落到文件里了。
- *
- * 分两种形态：
- *  - 替换型（rep 不含 pat）：pattern 不在了 = 已打。
- *  - 追加型（rep 里含 pat，比如「在原文后面补一段」）：打完 pattern 依然在文件里，
- *    所以只能看「完整的 rep 在不在」。若按 pattern 计数，这类补丁会永远显示 partial，
- *    而且 apply 每次都会再追加一遍（实测 #42 有 4 条是这种）。
- */
+/** 这条 replacement 是否已经落到文件里。追加型（rep 含 pat）只能查完整 rep，
+ *  否则永远 partial 且每次 apply 都会再追加一遍（#42 有 4 条是这种）。 */
 export function isDone(e, text) {
   const rep = e.rep || "";
   // 正则形态：pattern 还在文件里 = 还没打；pattern 不在 = 已打。
@@ -187,21 +204,34 @@ export function isDone(e, text) {
   // rep 与 pat 一模一样：这条补丁不改变任何文本（幂等标记型，全表共 3 条）。
   // 替换了等于没替换，所以永远算作「无需处理」——否则它会一直卡在 partial。
   if (rep === e.pat) return true;
-  if (rep !== "" && rep.includes(e.pat)) return text.includes(rep);
+  if (rep !== "" && rep.includes(e.pat)) {
+    // 追加型：pat 已经不在文件里了，就不该再当「待处理」。
+    // 两种情形都归到这里：① 这条早打过了（rep 也插进去了，pat 可能被后续编辑吃掉）；
+    // ② 本机这份文件根本没有这段（版本分支不同）——apply 会因 pat 不存在而跳过。
+    // 不这么判的话 #56 的 edit5 会永远 partial：它的 pat 在本机出现 0 次、
+    // isDone 又只查完整 rep（永远不在），于是 install.sh --dry 每次都说要改它，
+    // 用户反复点「一键注入」也消不掉那条待办。
+    if (!text.includes(e.pat)) return true;
+    return text.includes(rep);
+  }
   return !text.includes(e.pat);
 }
 
+/**
+ * 逐补丁扫盘判定。
+ * @returns {Array<{id,name,status,pkg?,file?,hits?,total?,targets?,files?}>}
+ * status: applied | hit | partial | miss | no_needle | no_file | no_pkg
+ */
 export function probe(root, patches) {
   const table = patches || loadPatches(resolvePatchesFile());
   const pkgs = listPkgs(root);
   const rows = [];
   for (const p of table) {
-    const cands = candidatesFor(p, pkgs);
-    if (!cands.length) { rows.push({ id: p.id, name: p.name, status: "no_pkg" }); continue; }
-    const rel = relOf(p);
+    const targets = targetsOf(p, pkgs);
+    if (!targets.length) { rows.push({ id: p.id, name: p.name, status: "no_pkg", reverse: p.reverse === true }); continue; }
     const edits = editsOf(p);
     const hitsRows = [];
-    for (const pkg of cands) {
+    for (const { pkg, rel } of targets) {
       const file = path.join(root, pkg, ...rel);
       if (!fs.existsSync(file) || !fs.statSync(file).isFile()) continue;
       const text = fs.readFileSync(file, "utf8");
@@ -225,7 +255,11 @@ export function probe(root, patches) {
       }
       hitsRows.push({ status: st, pkg, file, hits, total: edits.length, marker: hasMarker });
     }
-    if (!hitsRows.length) { rows.push({ id: p.id, name: p.name, status: "no_file", pkg: cands.join(",") }); continue; }
+    if (!hitsRows.length) {
+      // 去重：一条补丁的多个 targets 常指向同一个包的不同文件，直接 join 会重复列出同一个包名 N 次
+      rows.push({ id: p.id, name: p.name, status: "no_file", reverse: p.reverse === true, pkg: [...new Set(targets.map((t) => t.pkg))].join(",") });
+      continue;
+    }
     const rank = { hit: 4, drifted: 3, partial: 2, applied: 1, miss: 0, no_needle: 0 };
     let top = hitsRows[0];
     for (const r of hitsRows) if ((rank[r.status] ?? 0) > (rank[top.status] ?? 0)) top = r;
@@ -233,7 +267,16 @@ export function probe(root, patches) {
     rows.push(Object.assign(
       { id: p.id, name: p.name, status: allApplied ? "applied" : top.status },
       top,
-      { status: allApplied ? "applied" : top.status, targets: hitsRows.length, files: hitsRows.map((r) => r.file) },
+      {
+        status: allApplied ? "applied" : top.status,
+        targets: hitsRows.length,
+        files: hitsRows.map((r) => r.file),
+        // reverse：这条补丁的 markers 写的是「官方原版文案」，所以它在任何没打过补丁的
+        // 引擎上都会判 applied——它不改任何东西，只是「万一那段被别的补丁改花了，改回来」。
+        // 面板算「补丁是否都打上了」时要把它从分母里剔掉，否则 #2/#3 会让 58 变成 60，
+        // 看着像 60 条都被改过，实际只有 58 条。
+        reverse: p.reverse === true,
+      },
     ));
   }
   return rows;
@@ -282,17 +325,8 @@ export function engineVersion(root) {
 }
 
 /** 备份要记的引擎身份：版本 + 真实 root。 */
-/**
- * App 版本：从本机诊断快照里读。
- *
- * 为什么从那儿读：`/opt/dsh-app` 下没有 package.json，`relay.cjs` 里也没有版本字符串，
- * 唯一写着 App 版本号的地方就是 App 自己生成的 `$DSH_HOME/dsh-app/diagnostics.md`：
- *
- *   - App：1.2.0+11181211 · 1.2.0 · 11181211
- *
- * 三段分别是 versionName+versionCode 拼接、versionName、versionCode。取中间那段。
- * 读不到就返回 null——备份里记为 null，还原时不拿它做判断（只警告）。
- */
+/** App 版本：从 $DSH_HOME/dsh-app/diagnostics.md 的「- App：ver+code · ver · code」
+ * 取中间那段。只有这儿写了版本号（/opt/dsh-app 无 package.json）。读不到返回 null。 */
 export function appVersion() {
   try {
     const home = process.env.DSH_HOME || path.join(process.env.HOME || '/root', '.dsh')
@@ -380,6 +414,25 @@ let yamlModule
  */
 export function apply(root, opts = {}) {
   const { backupDir, dry = false, patches, cwd = process.cwd() } = opts;
+  // 引擎版本门放在这里，不放调用方：面板早就拦了，CLI 一直没拦，
+  // 同一台 9.9.9-unknown 的引擎，面板拒绝、install.sh 却真把 46 个文件改了。
+  // 用户按 README 重跑一次 install.sh，正好做了面板劝他别做的事。
+  // 放在 core.apply 里，两条路都绕不过去。
+  const version = engineVersion(root);
+  if (version && !SUPPORTED_ENGINES.includes(version)) {
+    return {
+      backupDir: dry ? null : "",
+      applied: 0,
+      failed: 0,
+      files: [],
+      logs: [],
+      errors: [{
+        kind: "engine_unsupported",
+        error: "当前引擎是 " + version + "，本插件只适配过 " + SUPPORTED_ENGINES.join(" / ")
+          + "。强打可能导致引擎起不来，先别注入——等插件发新版适配，或按 README 第 6 章把引擎包重装回适配的版本。",
+      }],
+    };
+  }
   const table = patches || loadPatches(resolvePatchesFile());
   const rows = probe(root, table);
   const logs = [];
@@ -401,8 +454,8 @@ export function apply(root, opts = {}) {
     for (const file of r.files) {
       if (!fs.existsSync(file)) continue;
       const text = fs.readFileSync(file, "utf8");
-      // 这里**不能**因为「文件里已经有 marker」就整体跳过。
-      // 一条补丁常有多处 pattern，marker 只代表其中**一处**打上了；
+      // 这里不能因为「文件里已经有 marker」就整体跳过。
+      // 一条补丁常有多处 pattern，marker 只代表其中一处打上了；
       // 剩下没打的 pattern 还留在文件里。原来的 `if (marked(p, text)) continue`
       // 会让这类文件永远停在 partial：marker 在、后几处却再也打不上。
       // 判据改成逐条看：这个 pattern 还在不在。
@@ -440,17 +493,13 @@ export function apply(root, opts = {}) {
     try { prevManifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8')) } catch { /* 没有就按新的写 */ }
   }
   // 复用分支只保留 at（「第一次打补丁之前」那个时间），engine 里的版本和 App 版本要按当前刷成新的。
-  // 不刷的话：App 从 1.2.0 升到 1.2.1 → 还原被 app_changed 拒绝 → 提示点一键注入 → 复用备份 →
+  // 不刷的话：App 从 1.2.0 升到 1.2.1 → 备份里 engine.app 还是旧的（现在只警告不拒绝，
   // engine.app 仍是 1.2.0 → 再点还原还是被拒，永远出不来。
   const manifest = prevManifest
     ? { ...prevManifest, engine: { ...engineInfo(root), app: appVersion() }, files: prevManifest.files || [] }
     : { root, at: new Date().toISOString(), engine: engineInfo(root), files: [] }
-  // 备份范围：**所有补丁的候选文件**，不只是这次动到的。
-  //
-  // 为什么：还原时用的是「最早那份备份」。如果它只覆盖第一次 apply 动到的 41 个文件，
-  // 后来新增的补丁（比如 #56/#77 改的 dsh-client-ui-conversation/lib/client.js）
-  // 就没东西可还原——用户点还原、看到「已还原 41 个文件」，client.js 的改动却还在。
-  // 每份都全量备份之后，任意一份单独拿出来都能还原干净。
+  // 备份覆盖所有补丁的候选文件，不只是这次动到的：还原用的是最早那份，
+  // 它若只包含首次 apply 动到的文件，后来新增的目标就没东西可还原。
   const backupTargets = new Set(byFile.keys());
   for (const r of rows) {
     for (const f of r.files || []) {
@@ -459,8 +508,8 @@ export function apply(root, opts = {}) {
   }
   // 复用备份时，缺哪些文件要区别对待：
   //
-  //   · 备份里已经有 → 跳过（它存的是打补丁前的原样，磁盘上那份已经打过了，照抄会污染）；
-  //   · 备份里没有 → 只有当磁盘上这份**还是干净的**才能补进去。
+  //   - 备份里已经有 → 跳过（它存的是打补丁前的原样，磁盘上那份已经打过了，照抄会污染）；
+  //   - 备份里没有 → 只有当磁盘上这份还是干净的才能补进去。
   //     如果磁盘上这份已经带 [dsh-purge] 标记，说明备份不完整（早先 apply 只备份了
   //     「这次动到的文件」，后来补丁的目标变多了），补进去的就是脏内容——
   //     而且 manifest 的 sha256 记的正是这份脏内容，还原时校验还会通过。
@@ -486,7 +535,7 @@ export function apply(root, opts = {}) {
     return {
       backupDir: null, applied: 0, failed: 0, files: [], logs,
       errors: [{
-        error: `备份不完整：它还缺 ${dirtyMissed.length} 个目标文件（如 ${dirtyMissed[0]}），而这些文件现在已经被打过补丁。继续复用会把脏内容存成原始状态。先按 README 15.2 重装引擎包，再点一键注入。`,
+        error: `备份不完整：它还缺 ${dirtyMissed.length} 个目标文件（如 ${dirtyMissed[0]}），而这些文件现在已经被打过补丁。继续复用会把脏内容存成原始状态。先按 README 第 6 章重装引擎包，再点一键注入。`,
       }],
       rolledBack: false, rollbackFailed: false, rollbackMissed: [],
     };
@@ -525,12 +574,17 @@ export function apply(root, opts = {}) {
       // 只报「真的能匹配上」的——miss 的补丁也进了候选表，但它们一条 pattern 都不在，
       // 全报出来会让 --dry 看起来像要改一堆其实改不动的东西。
       const text0 = fs.readFileSync(file, "utf8");
+      // 判据必须与 probe 一致，都用 isDone()：
+      //   · 旧写法用 "pattern 在不在文件里"，对**追加型**补丁（rep 含 pat）恰好反着——
+      //     那类补丁打完 pattern 仍在，于是已打过也会被算成「要改」；
+      //     而链式补丁里最后一条 pattern 已不在时，又会被算成「不用改」。
+      //     实测后果：probe 报 applied 59 + partial 1，而 apply --dry 一条都不输出，
+      //     用户按 README 跑 dry 排障看到的是空白。
+      //   · isDone 的语义就是「这条 edit 落没落进文件」，与后续真实执行同一套判断。
       const real = jobs.filter((j) => {
         const p = table.find((x) => x.id === j.id);
         if (!p) return false;
-        return editsOf(p).some((e) =>
-          isRegexEdit(e) ? new RegExp(e.re.source, e.re.flags).test(text0) : text0.includes(e.pat),
-        );
+        return editsOf(p).some((e) => !isDone(e, text0));
       });
       if (!real.length) continue;
       const realIds = real.map((j) => j.id);
@@ -709,7 +763,7 @@ export function restore(backupDir, opts = {}) {
     errors.push({
       error: `备份来自引擎 ${backupVersion}，当前引擎是 ${currentVersion}，这个版本本插件还没适配。` +
         "现在不能还原，也先别点「一键注入」——补丁是照旧版代码写的，打到新版引擎上有可能让它起不来。" +
-        "等插件发新版适配之后再动，或者先按 README 15 章把引擎包重装回原版。",
+        "等插件发新版适配之后再动，或者先按 README 第 6 章把引擎包重装回原版。",
       kind: 'engine_unsupported',
     });
   } else if (engineMismatch && engineSupported) {
@@ -720,17 +774,21 @@ export function restore(backupDir, opts = {}) {
       kind: 'engine_supported',
     });
   } else if (appMismatch) {
-    // ① 只有 App 变了：引擎文件没换，按设计还是提示重建一次。
-    errors.push({
-      error: `备份是在 App ${backupApp} 上打的，现在是 ${currentApp}。引擎本身没变，` +
-        "但备份要和当前状态对齐——点「一键注入」重打一次即可。",
-      kind: 'app_changed',
-    });
+    // ① 只有 App 变了：引擎包本身没换（engine.version 相同），备份里的原始文件
+    // 跟当前磁盘上的文件是同一份，还原回去没有风险。**只警告，不拒绝。**
+    //
+    // 2026-11-23 改：原来这里 push 到 errors 并 return，结果是一条死锁——
+    // 面板「一键注入」现在必经一次 restore 还原，而 restore 因为 App 版本变了就拒，
+    // 于是补丁打不上、还原也撤不掉；唯一的刷新入口（apply 里重建 manifest）永远到不了。
+    // 报错文案还写着「点一键注入重打一次即可」，而用户点的正是它——自相矛盾。
+    warnings.push(`备份是在 App ${backupApp} 上打的，现在是 ${currentApp}。引擎包没变，可以正常还原；`
+      + "下次注入会生成对齐当前 App 版本的新备份。");
   } else if (backupVersion === null && manifest !== null) {
     warnings.push("这份备份是很早以前打的，没记引擎版本，无法确认是否匹配");
   }
-  // 版本不匹配时必须立刻返回——不能记一条错就接着写文件，那等于明知会写坏还照写一遍。
-  if (engineMismatch || appMismatch) {
+  // 引擎版本不匹配时必须立刻返回——不能记一条错就接着写文件，那等于明知会写坏还照写一遍。
+  // （App 版本不匹配不再进这个判断，理由见上。）
+  if (engineMismatch) {
     logs.push("REFUSED: version mismatch");
     return { restored: 0, files, logs, errors, warnings, root, rootMismatch, hasManifest: true, engineMismatch, appMismatch, backupVersion, currentVersion, backupApp, currentApp };
   }

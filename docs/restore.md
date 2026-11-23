@@ -1,24 +1,27 @@
 # 还原引擎：完整命令
 
-> 原 README 的「15. 还原引擎（备份还在 / 备份没了）」整章。补丁打的是 `/opt/dsh/node_modules/@deepseek-ai/` 下的 39 个包，还原有两条路，取决于**你手上还有没有 apply 时生成的备份**。
+> 原 README 的「15. 还原引擎（备份还在 / 备份没了）」整章。补丁打的是 `/opt/dsh/node_modules/@deepseek-ai/` 下的 41 个包，还原有两条路，取决于**你手上还有没有 apply 时生成的备份**。
 > README 的「卸载与还原」一章只留最短路径。
 
 ## 有备份：用 restore
 
-`apply` 每次会生成一个 `backup-<时间戳>/files/` 目录：直接用 CLI 跑时在仓库目录，用 `install.sh` 装时在 `~/.dsh/dsh-purge/patch-backup/`，里面是**被这次补丁改过的文件的原始副本**。目录名以 `ls` 为准。注意两种命名：`install.sh` 建的是 `<时间戳>-<pid>`，插件自己建的是带毫秒与随机串的长名；直接用 CLI 跑时是秒级的 `backup-<14 位>`，同一秒内连跑两次会复用同一个目录。
+补丁在 `~/.dsh/dsh-purge/patch-backup/<时间戳>/files/` 下留一份**原始文件副本**（手动 CLI 打补丁时在仓库目录的 `backup-<时间戳>/`）。
+
+**插件目录下那份只保留最新一份。** 每次注入都会：先从这份备份把引擎还原成原始状态 → 重建一份新备份（此刻磁盘正是原始文件）→ 清掉 `patch-backup/` 下除最新之外的所有旧目录。所以那里 `ls` 出来通常只有一条，还原它就行，不用挑批次、不用倒序。
+
+**注意两处落盘位置不一样，行为也不同：**
+
+- `~/.dsh/dsh-purge/patch-backup/`（`install.sh` 与面板都写这里）→ **会自动清理，只留最新一份**。
+- 仓库根目录的 `backup-<时间戳>/`（手动跑 `node patches/purge-patch.mjs apply` 且没传 `--backup` 时才会建）→ **不会被清理**，会一直累积。那是用户自己的数据，脚本不去动它；不想要就手动删。
 
 ```sh
 cd ~/dsh-purge-go
-ls -d backup-*            # 看有哪几批
-
-# 按时间倒序撤（后打的先撤）
-node patches/purge-patch.mjs restore --backup ./backup-<最后一批>
-node patches/purge-patch.mjs restore --backup ./backup-<更早一批>
+ls ~/.dsh/dsh-purge/patch-backup/          # 通常只有一条
+node patches/purge-patch.mjs restore --backup ~/.dsh/dsh-purge/patch-backup/<那一条>
 ```
 
-**为什么要倒序**：同一文件可能被多批补丁动过，先撤早的会被后撤的覆盖，最后停在混合状态。
-
-**只跑一次 restore 不够**——`restore` 只还原「这一批备份里有的文件」，跨批次的混合改动要靠倒序全跑完。
+> 早期版本会攒下多批备份、需要倒序全撤，那是因为旧逻辑从不清理。现在不需要了；
+> 如果你的机器上还留着历史批次（升级前建的），可以先各自 restore 一遍再删，也可以直接删掉重建。
 
 > **还原前会核对引擎版本。** 每份备份里都记了打补丁时的引擎版本（在 `manifest.json` 的 `engine.version`）。
 > 如果当前引擎已经换过版本（比如 App 更新过），点「还原补丁」会被拒绝，并提示「备份来自引擎 X，当前是 Y，先点一键注入重打一次」。
@@ -45,23 +48,23 @@ npm install --force
 
 ### 方案 B：只重装确定被改的包
 
-不想动整个 `node_modules` 的话，只覆盖被改的那 39 个：
+不想动整个 `node_modules` 的话，只覆盖被改的那 41 个：
 
 ```sh
 # 先确认引擎版本（从任一包读）
 V=$(node -p "require('/opt/dsh/node_modules/@deepseek-ai/dsh-base/package.json').version")
 # 例如 0.2.2-rc.1
 
-for P in dsh-acp-app dsh-agent-instructions dsh-agent-loop dsh-api-session-controller \
-         dsh-app-boot dsh-base dsh-client-connection dsh-compaction-tool-result-pruner \
-         dsh-deliverable-file-references dsh-experimental-auto-review \
-         dsh-fs-observation-policy dsh-fs-sandbox dsh-harness-dev-context dsh-headless \
-         dsh-llm-deepseek dsh-permission-presets dsh-persona dsh-repeat-tool-reminder \
-         dsh-sandbox-local dsh-sandbox-policy dsh-sdk-app dsh-session \
-         dsh-session-format-v0-to-v1 dsh-session-log-deepseek dsh-session-reference \
-         dsh-settings dsh-skill-badge dsh-subagent dsh-system-prompt dsh-tool-bash \
-         dsh-tool-fs dsh-tool-pwsh dsh-tool-subagent dsh-tool-todo dsh-tool-web \
-         dsh-user-approval dsh-web-app dsh-client-ui-chat dsh-client-ui-conversation; do
+for P in dsh-acp-app dsh-agent-instructions dsh-agent-loop dsh-api-session-controller dsh-app-boot \
+         dsh-base dsh-client-connection dsh-client-ui-chat dsh-client-ui-conversation dsh-compaction-tool-result-pruner \
+         dsh-deliverable-file-references dsh-experimental-auto-review dsh-fs-observation-policy dsh-fs-sandbox dsh-harness-dev-context \
+         dsh-headless dsh-llm-deepseek dsh-permission-presets dsh-persona dsh-repeat-tool-reminder \
+         dsh-sandbox-local dsh-sandbox-policy dsh-sdk-app dsh-session dsh-session-format-v0-to-v1 \
+         dsh-session-log-deepseek dsh-session-reference dsh-settings dsh-skill-badge dsh-subagent \
+         dsh-system-prompt dsh-tool-bash dsh-tool-executor-ptc dsh-tool-fs dsh-tool-pwsh \
+         dsh-tool-subagent dsh-tool-todo dsh-tool-web dsh-tools dsh-user-approval \
+         dsh-web-app \
+         ; do
   TARBALL="/tmp/$P.tgz"
   curl -sL "https://registry.npmmirror.com/@deepseek-ai/$P/-/$P-$V.tgz" -o "$TARBALL"
   rm -rf "/opt/dsh/node_modules/@deepseek-ai/$P"
@@ -73,10 +76,10 @@ done
 rm -rf /tmp/px /tmp/*.tgz
 ```
 
-**这 39 个包怎么来的**：跑 `probe`，对 `status === 'applied'` 的行取 `files` 字段里出现的包名去重。
+**这 41 个包怎么来的**：跑 `probe`，对 `status === 'applied'` 的行取 `files` 字段里出现的包名去重。
 
 > **注意别用 `pkg` 字段**：一条补丁可能同时改好几个包（比如 #4 命中 base / web-app / headless / sdk-app / acp-app 五个），
-> 但 `pkg` 只记其中一个代表。按 `pkg` 去重只能得到 33 个，会漏掉 headless、sdk-app、acp-app、tool-subagent、tool-pwsh、client-ui-chat 这 6 个。
+> 但 `pkg` 只记其中一个代表。按 `pkg` 去重只能得到 35 个，会漏掉 headless、sdk-app、acp-app、tool-subagent、tool-pwsh、client-ui-chat 这 6 个。
 
 ## 验证有没有还原干净
 
@@ -100,9 +103,9 @@ done
 # 全部 0 处即为完全还原
 ```
 
-**为什么不能只看 `probe`**：`probe` 判断的是「目标状态满没满足」，分不清「本来就是这样」和「被改回来过」。原版引擎上本来就有 `applied` 2 条（反向补丁）、`hit` 30 条、`partial` 22 条。所以还原是否成功，只能**逐字节和原版 tarball 比**（上面那段脚本），或者看 `grep -r 'dsh-purge'` 有没有残留。
+**为什么不能只看 `probe`**：`probe` 判断的是「目标状态满没满足」，分不清「本来就是这样」和「被改回来过」。原版引擎上本来就有 `applied` 2 条（反向补丁）、`hit` 31 条、`partial` 26 条。所以还原是否成功，只能**逐字节和原版 tarball 比**（上面那段脚本），或者看 `grep -r 'dsh-purge'` 有没有残留。
 
-> 想快点判断也可以：`applied` 掉到 2 条、`hit` 回到 29 条，就说明补丁全撤了（这正好是原版的读数）。
+> 想快点判断也可以：`applied` 掉到 2 条、`hit` 回到 31 条，就说明补丁全撤了（这正好是原版的读数）。
 
 ## 还原后必须重启
 

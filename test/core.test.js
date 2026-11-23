@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { fileURLToPath } from 'node:url'
-import { apply, restore, sha256, verifyFile, probe } from '../patches/lib/core.mjs'
+import { apply, restore, sha256, verifyFile, probe, targetsOf, candidatesFor, relOf, marked } from '../patches/lib/core.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 
@@ -241,3 +241,140 @@ test('apply：文件里已有 marker 也要把剩余未打的 pattern 补上（p
   assert.ok(!text.includes('OLD_B'), '原文不该残留')
 })
 
+
+// ── targets：一条补丁改同包内多个文件 ──────────────────────────────────
+
+test('targetsOf 有 targets 时完全取代 file/rel（不合并）', () => {
+  const p = {
+    id: 920, name: 'TGT', file: ['pkg-a'], rel: ['lib', 'index.js'],
+    targets: [{ pkg: 'pkg-b', rel: ['presets', 'x.yml'] }],
+  }
+  const out = targetsOf(p, ['pkg-a', 'pkg-b'])
+  assert.equal(out.length, 1, 'targets 存在时不能把 file 也加进来')
+  assert.equal(out[0].pkg, 'pkg-b')
+  assert.deepEqual(out[0].rel, ['presets', 'x.yml'])
+})
+
+test('targetsOf 没有 targets 时与旧 candidatesFor+relOf 逐字等价', () => {
+  // 刻意用非默认 rel：如果实现偷懒只取 relOf 的默认值，这条会红。
+  // 期望值写死字面量，不拿被测函数自己算——那样是同义反复，改坏了也照样绿。
+  const p = { id: 921, name: 'OLD', file: 'alpha', rel: ['lib', 'deep.js'] }
+  const out = targetsOf(p, ['dsh-alpha', 'dsh-beta'])
+  assert.deepEqual(out, [{ pkg: 'dsh-alpha', rel: ['lib', 'deep.js'] }],
+    '老路径必须是「候选包 × rel」，且 rel 不能退化成默认的 lib/index.js')
+
+  // 候选包有多个时必须全出，不能只取第一个——这是 targets 之前就有的能力，
+  // 别因为加了新写法就把它丢了。
+  // 用 ALIAS 里的真实同义名：conversation-client 会同时映射到三个包名，
+  // 三个都装了就该三个都列（普通包名精确命中后不再模糊匹配，构造不出多候选）。
+  const multi = { id: 923, name: 'MULTI', file: 'conversation-client', rel: ['lib', 'client.js'] }
+  const out2 = targetsOf(multi, ['dsh-conversation-client', 'dsh-client-ui-conversation', 'dsh-client-ui-chat', 'unrelated'])
+  assert.deepEqual(out2.map((t) => t.pkg).sort(),
+    ['dsh-client-ui-chat', 'dsh-client-ui-conversation', 'dsh-conversation-client'],
+    '三个同义包名都要列出，unrelated 不该入选')
+})
+
+test('probe 按 targets 扫多个文件，全打上才算 applied', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'purge-tgt-'))
+  const dir = path.join(root, 'dsh-web-app', 'presets')
+  fs.mkdirSync(dir, { recursive: true })
+  fs.writeFileSync(path.join(dir, 'a.yml'), 'prefix: OLD_A\n')
+  fs.writeFileSync(path.join(dir, 'b.yml'), 'prefix: OLD_B\n')
+  const patches = [{
+    id: 922, name: 'MULTI',
+    targets: [
+      { pkg: 'dsh-web-app', rel: ['presets', 'a.yml'] },
+      { pkg: 'dsh-web-app', rel: ['presets', 'b.yml'] },
+    ],
+    // 替换结果必须是合法 YAML，否则 apply 会因 YAML 校验失败而整体回滚
+    replacements: [
+      { pattern: 'prefix: OLD_A', replace: 'prefix: ""\n# MARK_A' },
+      { pattern: 'prefix: OLD_B', replace: 'prefix: ""\n# MARK_A' },
+    ],
+    markers: ['MARK_A'],
+  }]
+  const before = probe(root, patches)
+  // 一条补丁的多个 pattern 会同时尝试应用到每个 target 文件，而各文件只含其中一句，
+  // 所以初始状态是 partial（每个文件各命中一半），这正是 targets 要表达的场景。
+  assert.equal(before[0].status, 'partial', '每个文件只命中一半，判 partial')
+  assert.equal(before[0].files.length, 2, '两个文件都要扫到')
+  apply(root, { backupDir: path.join(root, 'bk'), patches })
+  const after = probe(root, patches)
+  assert.equal(after[0].status, 'applied', '两个文件都打上才算 applied')
+  assert.match(fs.readFileSync(path.join(dir, 'a.yml'), 'utf8'), /MARK_A/)
+  assert.match(fs.readFileSync(path.join(dir, 'b.yml'), 'utf8'), /MARK_A/)
+})
+
+// ── forbid 不是 marker ────────────────────────────────────────────────
+
+test('forbid 里的原始文案不能当成「已打过」的标记', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'purge-forbid-'))
+  fs.mkdirSync(path.join(root, 'dsh-eps', 'lib'), { recursive: true })
+  // 文件里还留着原始文案（forbid 命中），pattern 也在 —— 应该是 hit（待打）
+  fs.writeFileSync(path.join(root, 'dsh-eps/lib/index.js'), 'const s = "ORIGINAL_TEXT"\n')
+  const patches = [{
+    id: 930, name: 'FORBID', file: 'eps', rel: ['lib', 'index.js'],
+    replacements: [{ pattern: 'ORIGINAL_TEXT', replace: 'PATCHED_TEXT' }],
+    markers: ['[dsh-purge] eps marker'],
+    forbid: ['ORIGINAL_TEXT'],
+  }]
+  const rows = probe(root, patches)
+  assert.equal(rows[0].status, 'hit',
+    'forbid 命中只说明还是原始状态，不能据此判 applied/drifted')
+  assert.equal(marked(patches[0], 'const s = "ORIGINAL_TEXT"'), false,
+    'marked() 不该读 forbid')
+})
+
+test('真打过之后带着 marker，才判 applied', () => {
+  // 这个用例要给「把 forbid 塞回 marked()」的旧写法留杀伤力：
+  // 文件里同时有 marker 和 forbid 的原文案时，两种实现都返回 true，测不出来。
+  // 所以这里构造「marker 在、forbid 的原串已被替换掉」——
+  // 旧实现因为 forbid 不在而不认，新实现只认 marker，结论相反。
+  const p = {
+    id: 931, name: 'FORBID2', file: 'eps', rel: ['lib', 'index.js'],
+    replacements: [{ pattern: 'ORIGINAL_TEXT', replace: 'PATCHED_TEXT' }],
+    markers: ['[dsh-purge] eps marker'],
+    forbid: ['ORIGINAL_TEXT'],
+  }
+  const patched = 'const s = "PATCHED_TEXT" // [dsh-purge] eps marker\n'
+  assert.equal(marked(p, patched), true, 'marker 命中就算打过（forbid 原串不在也不影响）')
+
+  // 反向：marker 不在、forbid 原串在 → 绝不能算打过
+  const pristine = 'const s = "ORIGINAL_TEXT"\n'
+  assert.equal(marked(p, pristine), false, '只有 forbid 命中时不能算打过')
+})
+
+
+// ── targets 里不存在的包要被跳过，不能算成 no_file ──────────────────────
+
+test('targetsOf 遇到包里不存在的项直接跳过', () => {
+  const p = {
+    id: 924, name: 'GONE',
+    targets: [
+      { pkg: 'dsh-exists', rel: ['lib', 'a.js'] },
+      { pkg: 'dsh-missing', rel: ['lib', 'b.js'] },
+    ],
+  }
+  const out = targetsOf(p, ['dsh-exists'])
+  assert.deepEqual(out, [{ pkg: 'dsh-exists', rel: ['lib', 'a.js'] }],
+    '不存在的包要跳过，否则 probe 会把 no_pkg 判成 no_file、被算进面板待办分母')
+})
+
+test('probe 对「targets 里有包没装」判 no_pkg，不判 no_file', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'purge-gone-'))
+  fs.mkdirSync(path.join(root, 'dsh-here', 'lib'), { recursive: true })
+  fs.writeFileSync(path.join(root, 'dsh-here/lib/index.js'), 'OLD' + String.fromCharCode(10))
+  const patches = [{
+    id: 925, name: 'MIXED',
+    targets: [
+      { pkg: 'dsh-here', rel: ['lib', 'index.js'] },
+      { pkg: 'dsh-absent', rel: ['lib', 'index.js'] },
+    ],
+    replacements: [{ pattern: 'OLD', replace: 'NEW' }],
+    markers: ['NEW'],
+  }]
+  const rows = probe(root, patches)
+  // 剩下的那个包有文件，所以不是 no_file；状态取决于文件内容
+  assert.notEqual(rows[0].status, 'no_file', '跳过的包不该让整条变成 no_file')
+  assert.equal(rows[0].files.length, 1, '只扫到真实存在的那个文件')
+})

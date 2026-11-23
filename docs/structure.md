@@ -54,7 +54,11 @@ patches/          patches.json（86 条）
   lib/core.mjs      纯函数库（probe / apply / restore / isDone / verifyFile）
 scripts/          engine-smoke.mjs（段注册与 assemble 重排验证）· kit-check.mjs（插件规范检查，需外部 plugin-kit）
                   · embed-default-prompt.mjs（正文打包）· dump-prompt.sh（打印注入正文明文）
-test/             8 个测试文件
+test/             11 个文件，分三类：
+                    · 单元测试 8 个（*.test.js，node --test 跑）
+                    · 场景测试 scenarios.mjs（造真实故障状态，验用户看到的那句话对不对）
+                    · 一致性检查 consistency.mjs（版本号 / 面板描述 / 补丁数字 / 状态词 /
+                      工具名 / 文件结构 / README 锚点，逐项与代码对照）
 install.sh        一键装：打补丁 → 建原生界面目录 → 装插件
 cordis.patch.yml  插件插入声明
 package.json      清单（name / version / engines.dsh / dsh.bundle.patch）
@@ -65,7 +69,7 @@ CHANGELOG.md      更新日志（每个版本改了什么）
 .gitignore        排除 backup-*/ 、patch-probe.json 这类运行时产物
 ```
 
-合计 **55 个文件、约 1.05 MB**（`git ls-files` 全量，含 `docs/` 下 3 张截图与 8 份说明；体积会随版本小幅变化）。
+合计 **58 个文件、约 1.06 MB**（`git ls-files` 全量，含 `docs/` 下 3 张截图与 8 份说明；体积会随版本小幅变化）。
 
 **运行时才会出现的（不进 git，`ls` 能看到别以为多了）：**
 
