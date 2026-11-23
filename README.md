@@ -117,18 +117,20 @@ am force-stop io.github.ccch1mneyyy.dsh_app
 面板上点「更新」是最省事的：它会拉新代码、还原旧补丁、按新版本重打、把面板同步成新的样子，全程在后台跑，点完就能看到别的。**不想用按钮的话，在终端里一条命令做同样的事：**
 
 ```sh
-cd ~/dsh-purge-go && git pull --ff-only && sh install.sh
+P=$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge) && cd "$P" && git pull --ff-only && sh install.sh
 ```
 
-三段：进目录 → 拉最新代码 → 重装（打新补丁、重建原生界面目录、把插件重新装配一遍）。**拉取失败就停在第二步**，不会拿旧代码往下跑。
+**这段不写死路径**：第一段从插件注册处（profile 里的软链）反查仓库真实位置，装到哪儿都能用——`~/dsh-purge-go`、`/root/tools/dsh-purge-go`，随你。剩下两段是拉最新代码、重装（打新补丁、重建原生界面目录、把插件重新装配一遍）。**拉取失败就停在第二步**，不会拿旧代码往下跑。
 
 跑完照例把 App 划掉重开，补丁和插件才生效。
 
-**连不上 GitHub 时**（报 `Failed to connect` / `Could not resolve host`），把中间那段换成归档下载：
+**连不上 GitHub 时**（报 `Failed to connect` / `Could not resolve host`），把 `git pull` 换成归档下载：
 
 ```sh
-cd ~/dsh-purge-go && curl -L https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main | tar xz --strip-components=1 -C . && sh install.sh
+P=$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge) && cd "$P" && curl -L https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main | tar xz --strip-components=1 -C . && sh install.sh
 ```
+
+**提醒一句**：归档下载会覆盖工作区文件，仓库里有自己改过的东西（`git status` 不干净）就先 `git stash`，不然会被冲掉。
 
 **面板上点「重读」可以确认当前版本**，版本号就在顶部那句话里；装好之后同一条也可用来查还有没有新版。
 
