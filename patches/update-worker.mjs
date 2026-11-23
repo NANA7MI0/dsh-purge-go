@@ -15,6 +15,7 @@
 //   ~/.dsh/dsh-purge/settle.log         每一步的时间戳，卡住了能看出停在哪
 import fs from 'node:fs'
 import path from 'node:path'
+import { probeGithub } from '../lib/netprobe.js'
 import { execFile } from 'node:child_process'
 
 const [home, repo, rootArg] = process.argv.slice(2)
@@ -105,10 +106,9 @@ setState({ status: 'running', from: before, to: '', error: '' })
 log('start', 'enter', { home, repo, root, before })
 
 // 1. 探网：github.com 通才值得试 git pull，否则直接走归档（省十几秒干等）
-const probe = await run(repo, 'curl', ['-sI', '-o', '/dev/null', '-w', '%{http_code}', '--max-time', '4', 'https://github.com'], 10_000)
-const netOk = /^[23]/.test(String(probe.out || '').trim())
-log('probe', netOk ? 'ok' : 'unreachable', { code: String(probe.out || '').trim() })
 
+const netOk = await probeGithub()
+log('probe', netOk ? 'ok' : 'unreachable', { code: netOk ? 'ok' : 'fail' })
 let via = ''
 if (netOk) {
   const pull = await run(repo, 'git', ['pull', '--ff-only'], 25_000)
