@@ -77,6 +77,13 @@ function buildEngine() {
     fs.mkdirSync(path.dirname(dst), { recursive: true })
     if (fs.existsSync(src)) fs.copyFileSync(src, dst)
   }
+  // 备份里 dsh-base 可能只有 cordis.patch.yml，缺 package.json → engineVersion() 返回 null
+  // → findReusableBackup 一律拒绝 → 一堆依赖版本号的分支全走不到。补上，跟真实引擎同形。
+  const basePkg = path.join(root, 'dsh-base', 'package.json')
+  if (!fs.existsSync(basePkg)) {
+    fs.mkdirSync(path.dirname(basePkg), { recursive: true })
+    fs.writeFileSync(basePkg, JSON.stringify({ name: 'dsh-base', version: '0.2.2-rc.1' }))
+  }
   return root
 }
 
@@ -337,6 +344,133 @@ console.log('\n场景 11：备份里某个文件丢了（预检就该拦住，�
 
 
 
+
+console.log('\n场景 12：一键注入——已打满时短路，没打满时必须真打')
+{
+  // 短路判据写错就会「该打不打」，这是最难发现的一类 bug：面板说正常，实际补丁没生效。
+  // 所以两侧都要验：打满时必须跳过（省 4-5 秒），没打满时必须真打 46 个文件。
+  const { patchApply } = await import('../lib/ops.js')
+
+  // 已打满：引擎干净 + 有备份 + 先打一遍
+  const T1 = fs.mkdtempSync(path.join(os.tmpdir(), 'oc1-'))
+  fs.cpSync(ENGINE_SRC, T1, { recursive: true })
+  const H1 = tmp('och1-')
+  fs.mkdirSync(H1 + '/dsh-purge', { recursive: true })
+  const first = patchApply(H1, { root: T1 })
+  const t0 = Date.now()
+  const again = patchApply(H1, { root: T1 })
+  const ms = Date.now() - t0
+  console.log('    已打满再点一次：applied=' + again.applied + ' upToDate=' + again.upToDate + ' 耗时=' + ms + 'ms')
+  check('已打满时短路（applied=0）', again.applied === 0, String(again.applied))
+  check('短路标记为 true', again.upToDate === true, String(again.upToDate))
+  check('短路后变快（本机 < 1000ms）', ms < 1000, ms + 'ms')
+
+  // 没打满：干净引擎必须真打
+  const clean = fs.mkdtempSync(path.join(os.tmpdir(), 'oc2-'))
+  const rb = realBackup()
+  if (rb) {
+    for (const f of rb.files) {
+      const rel = typeof f === 'string' ? f : f.rel
+      const s = path.join(rb.base, rb.bk, 'files', rel)
+      const d = path.join(clean, rel)
+      fs.mkdirSync(path.dirname(d), { recursive: true })
+      if (fs.existsSync(s)) fs.copyFileSync(s, d)
+    }
+  }
+  // 先探一次：这时候引擎还没被打过，applied 必须是 0（否则下面的「真打」测不出东西）
+  const r0 = probe(clean)
+  const real0 = r0.filter((r) => r.reverse !== true && r.status !== 'no_pkg')
+  const applied0 = real0.filter((r) => r.status === 'applied').length
+  check('干净引擎上确实一条都没打（否则下面的对照没意义）', applied0 === 0, String(applied0))
+  const H2 = tmp('och2-')
+  fs.mkdirSync(H2 + '/dsh-purge', { recursive: true })
+  const fresh = patchApply(H2, { root: clean })
+  console.log('    干净引擎第一次打：applied=' + fresh.applied + ' upToDate=' + fresh.upToDate)
+  check('没打满时必须真打', fresh.applied > 0, String(fresh.applied))
+  check('没打满时不能标 upToDate', fresh.upToDate !== true, String(fresh.upToDate))
+
+  // 半截引擎（只打了一部分）也必须真打——这条专门防「判据写成 some（只要有一条 applied 就算完）」。
+  // 干净引擎上 applied 是 0，some 和 every 结果一样，测不出区别；只有半截状态才分得开。
+  // ENGINE_SRC 是干净骨架，得先打满再换回几个文件，才是真正的「半截」状态
+  const half = fs.mkdtempSync(path.join(os.tmpdir(), 'oc3-'))
+  fs.cpSync(ENGINE_SRC, half, { recursive: true })
+  const Hpre = tmp('oc3pre-')
+  fs.mkdirSync(Hpre + '/dsh-purge', { recursive: true })
+  patchApply(Hpre, { root: half })
+  if (rb) {
+    let n = 0
+    for (const f of rb.files) {
+      if (n >= 5) break
+      const rel = typeof f === 'string' ? f : f.rel
+      const src = path.join(rb.base, rb.bk, 'files', rel)
+      if (fs.existsSync(src)) { fs.copyFileSync(src, path.join(half, rel)); n += 1 }
+    }
+  }
+  const rh = probe(half)
+  const realH = rh.filter((r) => r.reverse !== true && r.status !== 'no_pkg')
+  const appliedH = realH.filter((r) => r.status === 'applied').length
+  console.log('    半截引擎 applied=' + appliedH + '/' + realH.length)
+  check('半截引擎上确实有 applied（否则这条测不出 some/every 的区别）', appliedH > 0, String(appliedH))
+  check('半截引擎上 applied 不满', appliedH < realH.length, appliedH + '/' + realH.length)
+  const H3 = tmp('och3-')
+  fs.mkdirSync(H3 + '/dsh-purge', { recursive: true })
+  fs.cpSync(Hpre + '/dsh-purge/patch-backup', H3 + '/dsh-purge/patch-backup', { recursive: true })
+  const halfRun = patchApply(H3, { root: half })
+  console.log('    半截引擎点一键：applied=' + halfRun.applied + ' upToDate=' + halfRun.upToDate)
+  check('半截引擎不许短路', halfRun.upToDate !== true, String(halfRun.upToDate))
+  // 半截状态下：要么真打、要么明确拒绝，但不许「假装成功」
+  const okOrRefused = halfRun.applied > 0 || (halfRun.ok === false && halfRun.errors.length > 0)
+  check('半截引擎：真打或明确拒绝，不许假成功', okOrRefused, 'applied=' + halfRun.applied + ' errors=' + halfRun.errors.length)
+  if (halfRun.ok === false) {
+    const msg = String(halfRun.errors[0].error || '')
+    console.log('    半截引擎被拒：' + msg.slice(0, 50))
+    check('拒绝时说清了要重装引擎包', /重装引擎包/.test(msg), msg.slice(0, 40))
+  }
+
+}
+
+console.log('\n场景 13：目标文件被删掉时，不许短路（否则永远修不回来）')
+{
+  // 这是最容易漏的一条：probe 原来的 existsSync 那层 continue 让「目标文件被删」成了盲区，
+  // 一条补丁只要有别的目标还在，就照样判 applied ——「已全部打上」的短路于是一直说正常，
+  // 而手动 restore 本来是能把文件补回来的。
+  const { patchApply } = await import('../lib/ops.js')
+  const T = fs.mkdtempSync(path.join(os.tmpdir(), 'mf-'))
+  fs.cpSync(ENGINE_SRC, T, { recursive: true })
+  const H = tmp('mfh-')
+  fs.mkdirSync(H + '/dsh-purge', { recursive: true })
+  patchApply(H, { root: T })          // 先打满
+
+  // 挑一个真实存在的目标文件删掉
+  const rowsNow = probe(T)
+  let victim = null
+  for (const r of rowsNow) {
+    if (r.reverse === true) continue
+    const f = (r.files || [])[0]
+    if (f && fs.existsSync(f)) { victim = f; break }
+  }
+  if (!victim) skip('删目标文件', '没找到可删的目标文件')
+  else {
+    fs.rmSync(victim)
+    console.log('    删掉：' + path.relative(T, victim))
+    const after = probe(T)
+    // 缺文件有两种表现，取决于它是不是某条补丁的唯一目标：
+    //   · 唯一目标 → 那条走 no_file，status 直接变；
+    //   · 多目标之一 → status 仍是 applied，但 missingTargets > 0。
+    // 两种都必须让 probe 看出来，否则短路会一直说正常。
+    const withMissing = after.filter((r) => (r.missingTargets || 0) > 0)
+    const wentNoFile = after.filter((r) => r.status === 'no_file' || r.status === 'no_pkg')
+    console.log('    probe 发现：缺目标 ' + withMissing.length + ' 条 / 整条 no_file ' + wentNoFile.length + ' 条')
+    check('probe 能用某种方式看出目标缺了', withMissing.length > 0 || wentNoFile.length > 0,
+      'missingTargets=' + withMissing.length + ' no_file=' + wentNoFile.length)
+
+    const t0 = Date.now()
+    const r2 = patchApply(H, { root: T })
+    console.log('    再点一键：applied=' + r2.applied + ' upToDate=' + r2.upToDate)
+    check('有目标缺失时不许短路', r2.upToDate !== true, String(r2.upToDate))
+    check('文件被补回来了', fs.existsSync(victim), '补不回来会一直缺')
+  }
+}
 // 收尾：把本次造的所有临时目录删掉。每条 mkdtemp 都记在 created 里，
 // 不删的话跑十几次就攒出几百个 /tmp/scn-*（实测跑半天到 757 个）。
 for (const d of created) {

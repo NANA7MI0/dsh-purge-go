@@ -110,8 +110,15 @@ export function targetsOf(p, pkgs) {
       // 包不存在就跳过这一项，别把它当成「有这个包、只是文件不在」。
       // 不跳的话 status 会从 no_pkg 变成 no_file，被算进面板的 applicable 分母，
       // 用户看到一条永远消不掉的待办（id 43/63 在没装 dsh-web-app 的引擎上就是这样）。
-      if (Array.isArray(pkgs) && pkgs.length > 0 && !pkgs.includes(t.pkg)) continue;
       const rel = Array.isArray(t.rel) ? t.rel : typeof t.rel === "string" ? t.rel.split("/").filter(Boolean) : relOf(p);
+      // 包不存在时**照样收进来**，但打上 absent 标记——不这样做的话 probe 完全看不见
+      // 「这条补丁的目标包被整个删掉了」，于是一条本该 no_file 的补丁仍判 applied，
+      // 「已全部打上」的短路就会让删掉的文件永远修不回来（实测：删掉 dsh-acp-app 整个包，
+      // probe 仍报 60 applied，而手动 restore 能把文件补回来）。
+      if (Array.isArray(pkgs) && pkgs.length > 0 && !pkgs.includes(t.pkg)) {
+        out.push({ pkg: t.pkg, rel, absent: true });
+        continue;
+      }
       out.push({ pkg: t.pkg, rel });
     }
     if (out.length) return out;
@@ -229,11 +236,17 @@ export function probe(root, patches) {
   for (const p of table) {
     const targets = targetsOf(p, pkgs);
     if (!targets.length) { rows.push({ id: p.id, name: p.name, status: "no_pkg", reverse: p.reverse === true }); continue; }
+    // 全都没了（包被删/文件被删）→ no_pkg，维持原有语义。
+    // 但「一部分在、一部分没了」不能当 applied——那会让 existsSync 那层的 continue
+    // 变成盲区：删掉的目标文件永远补不回来，短路还一直说正常。
+    const absentTargets = targets.filter((t) => t.absent === true).length;
     const edits = editsOf(p);
     const hitsRows = [];
-    for (const { pkg, rel } of targets) {
+    let fileMissing = 0;
+    for (const { pkg, rel, absent } of targets) {
+      if (absent) { fileMissing += 1; continue; }
       const file = path.join(root, pkg, ...rel);
-      if (!fs.existsSync(file) || !fs.statSync(file).isFile()) continue;
+      if (!fs.existsSync(file) || !fs.statSync(file).isFile()) { fileMissing += 1; continue; }
       const text = fs.readFileSync(file, "utf8");
       if (!edits.length) { hitsRows.push({ status: "no_needle", pkg, file }); continue; }
       // hits 的语义是「还剩几处没打」，不是「pattern 命中几处」——
@@ -263,12 +276,17 @@ export function probe(root, patches) {
     const rank = { hit: 4, drifted: 3, partial: 2, applied: 1, miss: 0, no_needle: 0 };
     let top = hitsRows[0];
     for (const r of hitsRows) if ((rank[r.status] ?? 0) > (rank[top.status] ?? 0)) top = r;
+    // 「全部 applied」还要加上「目标一个都没缺」——否则删掉的目标文件会让这条补丁
+    // 明明没打全却判 applied（existsSync 那层 continue 成了盲区）。
+    const anyMissing = fileMissing > 0 || absentTargets > 0;
     const allApplied = hitsRows.every((r) => r.status === "applied");
     rows.push(Object.assign(
-      { id: p.id, name: p.name, status: allApplied ? "applied" : top.status },
+      { id: p.id, name: p.name, status: allApplied && !anyMissing ? "applied" : top.status },
       top,
       {
-        status: allApplied ? "applied" : top.status,
+        status: allApplied && !anyMissing ? "applied" : top.status,
+        // 缺了几个目标：面板算「是否全打上」时要看它，光看 status 不够
+        missingTargets: fileMissing,
         targets: hitsRows.length,
         files: hitsRows.map((r) => r.file),
         // reverse：这条补丁的 markers 写的是「官方原版文案」，所以它在任何没打过补丁的

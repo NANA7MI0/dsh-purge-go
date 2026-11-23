@@ -347,7 +347,11 @@ test('真打过之后带着 marker，才判 applied', () => {
 
 // ── targets 里不存在的包要被跳过，不能算成 no_file ──────────────────────
 
-test('targetsOf 遇到包里不存在的项直接跳过', () => {
+test('targetsOf 遇到包里不存在的项：收进来但打 absent 标记', () => {
+  // 以前这里是「直接跳过」。跳过有个盲区：目标包被整个删掉时，probe 完全看不见，
+  // 一条本该 no_file 的补丁仍判 applied，「已全部打上」的短路就让删掉的文件永远修不回来
+  // （实测：删掉 dsh-acp-app 整个包，probe 仍报 60 applied，而手动 restore 能补回来）。
+  // 所以改成「收进来 + absent 标记」，由 probe 决定是判 no_pkg 还是算「缺目标」。
   const p = {
     id: 924, name: 'GONE',
     targets: [
@@ -356,8 +360,10 @@ test('targetsOf 遇到包里不存在的项直接跳过', () => {
     ],
   }
   const out = targetsOf(p, ['dsh-exists'])
-  assert.deepEqual(out, [{ pkg: 'dsh-exists', rel: ['lib', 'a.js'] }],
-    '不存在的包要跳过，否则 probe 会把 no_pkg 判成 no_file、被算进面板待办分母')
+  assert.equal(out.length, 2, '两项都要在，缺的那项带标记')
+  assert.deepEqual(out[0], { pkg: 'dsh-exists', rel: ['lib', 'a.js'] })
+  assert.equal(out[1].pkg, 'dsh-missing')
+  assert.equal(out[1].absent, true, '不存在的包要标 absent，否则 probe 看不见它')
 })
 
 test('probe 对「targets 里有包没装」判 no_pkg，不判 no_file', () => {
