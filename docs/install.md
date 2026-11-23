@@ -27,7 +27,7 @@
 （「全部功能」→「终端」），打开后粘这一整行、回车：
 
 ```sh
-git clone https://github.com/NANA7MI0/dsh-purge-go ~/dsh-purge-go && cd "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)" && sh install.sh
+git clone https://github.com/NANA7MI0/dsh-purge-go ~/dsh-purge-go && cd ~/dsh-purge-go && sh install.sh
 ```
 
 **想先看会改哪些文件，把 `sh install.sh` 换成 `sh install.sh --dry`** —— 只扫描、预演，不装插件、不改引擎、不在仓库里留文件。
@@ -109,7 +109,7 @@ root@localhost:~/workspace#
 **第 1 条：安装**
 
 ```sh
-git clone https://github.com/NANA7MI0/dsh-purge-go ~/dsh-purge-go && cd "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)" && sh install.sh
+git clone https://github.com/NANA7MI0/dsh-purge-go ~/dsh-purge-go && cd ~/dsh-purge-go && sh install.sh
 ```
 
 三件事串在一起：下载仓库 → 进入目录 → 跑安装脚本。**前一步成功了才往下走**，所以中途出错不会在错误的目录里继续乱跑。
@@ -160,8 +160,10 @@ curl -L https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main
 **报 `destination path already exists`**：说明 `~/dsh-purge-go` 已经在了，之前装过。不用删，直接跑这条（跳过下载，只跑安装；脚本是幂等的，装过再跑一遍也不会出问题）：
 
 ```sh
-cd "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)" && sh install.sh
+cd ~/dsh-purge-go && sh install.sh
 ```
+
+**这里写的是实际路径，不是反查**——报这个错时插件多半还没装成，profile 里没有登记，反查会落空。要是你当初 clone 到了别的地方，把 `~/dsh-purge-go` 换成那个路径。
 
 ### 脚本到底做了什么
 
@@ -182,7 +184,7 @@ cd "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)" && sh install.
 
 ```sh
 # 第一步：打补丁（补丁层）—— 不做这步，破甲只生效一半
-cd "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)"
+cd ~/dsh-purge-go
 node patches/purge-patch.mjs probe   # 先看哪些能打
 node patches/purge-patch.mjs apply   # 真打
 

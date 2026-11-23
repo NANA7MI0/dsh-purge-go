@@ -76,7 +76,7 @@ root@localhost:~/workspace#
 **第 1 条：安装**
 
 ```sh
-git clone https://github.com/NANA7MI0/dsh-purge-go ~/dsh-purge-go && cd "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)" && sh install.sh
+git clone https://github.com/NANA7MI0/dsh-purge-go ~/dsh-purge-go && cd ~/dsh-purge-go && sh install.sh
 ```
 
 三件事串在一起：下载仓库 → 进入目录 → 跑安装脚本。**前一步成功了才往下走**，所以中途出错不会在错误的目录里继续乱跑。
@@ -147,8 +147,10 @@ curl -L https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main
 **报 `destination path already exists`**：说明 `~/dsh-purge-go` 已经在了，之前装过。不用删，直接跑这条（跳过下载，只跑安装；脚本是幂等的，装过再跑一遍也不会出问题）：
 
 ```sh
-cd "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)" && sh install.sh
+cd ~/dsh-purge-go && sh install.sh
 ```
+
+**这里写的是实际路径，不是反查**——报这个错时插件多半还没装成，profile 里没有登记，反查会落空。要是你当初 clone 到了别的地方，把 `~/dsh-purge-go` 换成那个路径。
 
 #### install.sh 到底做了什么
 
@@ -363,8 +365,10 @@ cd "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)" && sh install.
 卸载有两层：第 ② 步只摘插件，第 ① 步 `restore` 才撤掉引擎里的补丁改动。**按顺序跑完，别跳步：**
 
 ```sh
-# ① 还原补丁层（最容易漏，也最重要）
-cd "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)"
+# ① 先记住仓库在哪，再还原补丁层（最容易漏，也最重要）
+#   必须先记：② 一摘插件，下面那个软链就没了，到时候就查不到仓库在哪了
+REPO=$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)
+cd "$REPO"
 # 备份在哪取决于你怎么装的：install.sh 装 → ~/.dsh/dsh-purge/patch-backup/<时间戳>
 #                             手动 CLI 打 → ./backup-<时间戳>
 ls -d ~/.dsh/dsh-purge/patch-backup/* ./backup-* 2>/dev/null
@@ -374,10 +378,10 @@ node patches/purge-patch.mjs restore --backup <上面列出的那一批>
 # ② 从 profile 摘掉插件
 dsh plugin --profile web remove dsh-go-purge
 
-# ③ 删插件自己的文件
-rm -rf "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)"
-rm -rf ~/.dsh/prompt-inject.md ~/.dsh/dsh-purge
+# ③ 删插件自己的文件（这里用 ① 记下的 $REPO，不能重新反查）
+rm -rf "$REPO"
 rm -rf ~/.dsh/profiles/web/node_modules/dsh-go-purge
+rm -rf ~/.dsh/prompt-inject.md ~/.dsh/dsh-purge
 
 # ④ 删原生界面目录（0.3 起就有，卸载最容易漏的一项）
 rm -rf ~/.dsh/dsh-go/plugins/dsh-go-purge
