@@ -81,7 +81,7 @@ cd "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)" && sh install.
 **两种情况都会让补丁失效**：
 
 - **升级引擎**：自己跑 `npm install`、或按 [还原引擎](restore.md) 还原
-- **更新 App**：从 GitHub 装新版 APK。App 启动时会重新铺一遍 `/opt/dsh/node_modules/@deepseek-ai/`，实测 331 个包的时间戳全部刷新、补丁一条不剩。**这一点最容易被忽略**——你什么都没干，只是装了个新版 App，破甲就剩一半了。
+- **更新 App**：从 GitHub 装新版 APK。App 启动时会重新铺一遍 `/opt/dsh/node_modules/@deepseek-ai/`，实测 332 个包的时间戳全部刷新、补丁一条不剩。**这一点最容易被忽略**——你什么都没干，只是装了个新版 App，破甲就剩一半了。
 
 **怎么知道自己中招了**：补丁被冲掉时**输入框上方会自己出现一条红色状态条**（正常时不显示，也不是点胶囊才出来的）。
 
