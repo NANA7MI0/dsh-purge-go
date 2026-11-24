@@ -63,8 +63,23 @@ say() { printf '%s\n' "$*"; }
 # 纯 sed 实现、不启 node：只取一行 JSON 里的简单字段，够用且快。
 # 用法：result_field "$OUT" kind
 result_field() {
-  printf '%s' "$1" | grep '^__RESULT__ ' | tail -1 \
-    | sed -n 's/.*"'"$2"'":\([^,}]*\).*/\1/p' | tr -d '"'
+  # 用 node 解析 JSON，不用 sed 抠字段：sed 那版的正则是 [^,}]*，值里一旦带逗号
+  # （比如错误消息）或嵌套对象就会截断。现在只读 kind/applied/clean 三个原子值，
+  # 碰不上，但契约上是脆的——换 node 解析只多几十毫秒，把这条路彻底封掉。
+  # JSON 解析失败就返回空串，调用方的 [ "$x" = "xxx" ] 自然落到 else 分支，不会误判。
+  printf '%s' "$1" | node -e '
+    let s = ""
+    process.stdin.setEncoding("utf8")
+    process.stdin.on("data", (d) => { s += d })
+    process.stdin.on("end", () => {
+      const line = s.split("\n").filter((l) => l.startsWith("__RESULT__ ")).pop()
+      if (!line) return
+      try {
+        const v = JSON.parse(line.slice(11))[process.argv[1]]
+        if (v !== undefined && v !== null) process.stdout.write(String(v))
+      } catch {}
+    })
+  ' "$2"
 }
 # --dry 是「只看不改」，--plugin-only 是「只装插件不打补丁」，两个一起给没有意义，
 # 而且会让调用者以为拿到的是预演结果。直接拒绝，别让顺序决定行为。

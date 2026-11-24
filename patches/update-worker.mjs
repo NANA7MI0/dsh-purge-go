@@ -16,6 +16,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { probeGithub } from '../lib/netprobe.js'
+import { unpackScript, downloadArchive } from '../lib/unpack-repo.js'
 import { execFile } from 'node:child_process'
 
 const [home, repo, rootArg] = process.argv.slice(2)
@@ -127,40 +128,25 @@ if (!via) {
   const tgz = tmp + '/repo.tgz'
   fs.mkdirSync(tmp, { recursive: true })
 
-  // 用 node 自己下载，不调 curl：实测有平板（dsh-go 装在平板上）根本没装 curl，
-  // 连 wget 都没有。那种机器上这条路永远失败，用户看到的是「更新失败」却没原因。
-  // node 22+ 自带 fetch，不用装任何东西。
-  // node 18 以下没有内置 fetch。不先判一下的话，报出来的是
-  // 「fetch is not defined」——用户根本不知道该怎么办。
-  if (typeof fetch !== 'function' || typeof AbortSignal?.timeout !== 'function') {
-    fail('当前 node 版本太老（没有内置 fetch / AbortSignal.timeout），升级到 18 以上再试。当前：' + process.version, 'old_node')
-  }
+  // 下载这半段收在 lib/unpack-repo.js 里，和面板更新那条路共用。
+  // 以前两边各写一份，超时已经不一致（40 vs 60 秒），node 版本检查也只有一边带分类。
   try {
-    // 必须带超时：fetch 默认不超时，网络半死不活时会永久挂着，用户看到的是「正在后台更新」永不结束。
-    // 60 秒够下 ~1.5 MB 的仓库归档，慢网也不至于误杀。
-    const res = await fetch(TARBALL, { signal: AbortSignal.timeout(60_000) })
-    if (!res.ok) throw new Error('HTTP ' + res.status)
-    const buf = Buffer.from(await res.arrayBuffer())
-    if (buf.length < 1024) throw new Error('下载到的内容只有 ' + buf.length + ' 字节，不像压缩包')
-    fs.writeFileSync(tgz, buf)
-    log('download', 'ok', { bytes: buf.length })
+    const dl = await downloadArchive({ url: TARBALL, dest: tgz })
+    log('download', 'ok', { bytes: dl.bytes })
   } catch (error) {
-    fail('下载仓库归档失败（' + String(error && error.message).slice(0, 60) + '）。检查网络后重试。')
+    const msg = String((error && error.message) || error)
+    // node 太老归到 old_node：install.sh 认这个分类会提示升级 node，
+    // 而不是笼统说「检查网络」——那种提示下用户永远修不好。
+    if (/node 太老/.test(msg)) fail(msg + '。当前：' + process.version, 'old_node')
+    fail('下载仓库归档失败（' + msg.slice(0, 60) + '）。检查网络后重试。')
   }
 
-  // 覆盖这件事交给 patches/lib/replace-repo.sh：它先铺新的、再删多余的，
-  // 中途被打断也不会留下空仓库；.git 与 node_modules 一概不动。
-  // 以前这段是 here-string 拼出来的，update-worker 和 dshgo.js 各一份、还分叉过。
-  // 注意传的是 repo（插件仓库），不是 root（引擎目录）——
+  // 解包+覆盖交给 lib/unpack-repo.js（内部调 patches/lib/replace-repo.sh）：
+  // 它先铺新的、再删多余的，中途被打断也不会留下空仓库，.git 与 node_modules 一概不动。
+  // 以前这段在 update-worker 和 dshgo.js 各有一份、还分叉过，现在收在一处。
+  // 注意传的是 repo（插件仓库），不是引擎目录——
   // 传错会把整个插件仓库铺进 @deepseek-ai/，实测过一次，引擎目录被污染 12 项。
-  const script =
-    'set -e; ' +
-    'tar xzf "' + tgz + '" -C "' + tmp + '"; ' +
-    'SRC=$(ls -d "' + tmp + '"/*/ | head -1); ' +
-    'sh "' + path.join(path.dirname(new URL(import.meta.url).pathname), 'lib', 'replace-repo.sh') + '" "$SRC" "' + repo + '"; ' +
-    // || true：前面任何一步失败时 set -e 会直接退出，这句就不跑了，/tmp 留一份归档。
-    // 而且它一旦非 0 还会让整条 sh -c 非 0，导致「其实换成了却报失败、也不跑 settle」。
-    'rm -rf "' + tmp + '" || true'
+  const script = unpackScript({ tgz, tmp, dest: repo })
   const fb = await run(repo, 'sh', ['-c', script], 120_000)
   log('fallback', fb.code === 0 ? 'ok' : 'failed', { code: fb.code, err: String(fb.err || '').slice(0, 120) })
   if (fb.code !== 0) fail('下载或覆盖失败：' + String(fb.err || fb.out || '').slice(0, 80))

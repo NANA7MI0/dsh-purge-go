@@ -444,7 +444,7 @@ ls ~/.dsh/dsh-go/plugins/ 2>/dev/null    # 没有 dsh-go-purge 就算干净
 | Node | 20+（用到 `node --check` 和 ESM） |
 | **包管理器** | **pnpm**（`dsh plugin` 底层就是调 pnpm，缺了会报 `dsh: pnpm was not found`） |
 | 运行时依赖 | 零。插件本身只用 Node 内置模块 |
-| 体积 | 73 个文件 / 约 1.2 MB（含截图与文档；连 `.git` 一起克隆下来约 9 MB，其中 `.git` 占 6.7 MB） |
+| 体积 | 75 个文件 / 约 1.2 MB（含截图与文档；连 `.git` 一起克隆下来约 9 MB，其中 `.git` 占 6.7 MB） |
 
 **引擎版本适配表**（这张表同时决定「点一键注入」和「点还原」会不会被拦）：
 
@@ -466,7 +466,7 @@ ls ~/.dsh/dsh-go/plugins/ 2>/dev/null    # 没有 dsh-go-purge 就算干净
 |---|---|---|
 | 目标 | PC 上的 DSH | dsh-go |
 | 注入方式 | 自带 `core.js`（177 KB，补丁表已拆去 `lib/patches/`），逐句改写系统提示 | 在装配环节整段替换 |
-| 规模 | 518 文件 / 305 个 js+mjs / 4.83 MB | **73 个跟踪文件 / 约 1.2 MB**（打包 56 文件 / 618 KB；lib 目录 5,401 行、lib+patches 7,009 行） |
+| 规模 | 518 文件 / 305 个 js+mjs / 4.83 MB | **75 个跟踪文件 / 约 1.2 MB**（打包 58 文件；lib 目录 5,484 行、lib+patches 7,078 行） |
 | 补丁 | 自带（`lib/patches/` 拆成 6 个模块，83 条） | 导成 `patches.json`（86 条）+ 独立执行器 |
 | 桌面功能 | asar 解包、计划任务 | 无 |
 | 面板 | `packages/purge-panel/` 独立 Web 面板 | 原生面板（Web 版不移植，理由见[刻意不做的几件事](#刻意不做的几件事)） |
@@ -483,12 +483,10 @@ ls ~/.dsh/dsh-go/plugins/ 2>/dev/null    # 没有 dsh-go-purge 就算干净
 | 部分 | 作者 |
 |---|---|
 | `lib/` | [LanJinGod/dsh-purge-go](https://github.com/LanJinGod/dsh-purge-go)，直接引用，本仓库只做 dsh-go 侧路径适配 |
-| `assets/categories.json` | 同上 |
+| `assets/categories.json`（题材分类扩展层） | 同上；本仓库加了 4 条扩展分类，和正文一样封在 `lib/categories-table.json` 里 |
 | `lib/asset-table.json`（正文加密副本） | 同上的正文，本仓库加了题材分类扩展的 4 行标记后重新打包 |
 | `patches/patches.json` | dsh-purge 社区维护版作者 小杨 / YuJunZhiXue（数据导出自 [kingcharleslzy-ai/dsh-purge](https://github.com/kingcharleslzy-ai/dsh-purge) v1.6.93，MIT） |
 | `patches/purge-patch.mjs`、README、包名映射 | 本仓库 |
-
-仓库挂在 `NANA7MI0` 名下只代表谁维护这份适配，不代表注入层或补丁设计归他。
 
 许可证 **AGPL-3.0**（0.2.x 是 MIT，0.3.0 换注入层后按 AGPL 传染性改了）。
 

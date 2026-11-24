@@ -30,7 +30,8 @@ function tempHome() {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'purge-cat-'))
 }
 
-test('出厂分类：未成年 / 乱伦 / 家庭 三条，编号从 26 起', () => {
+
+test('出厂分类：四条，编号从 26 起', () => {
   const home = tempHome()
   const { entries, all } = loadCategories(home)
   assert.equal(all.length, 4)
@@ -42,12 +43,15 @@ test('出厂分类：未成年 / 乱伦 / 家庭 三条，编号从 26 起', () 
     entries.map((entry) => entry.n),
     [26, 27, 28, 29],
   )
-  assert.ok(entries[3].labels.includes('成人向'))
-  assert.ok(entries[3].labels.includes('色情'))
-  assert.ok(entries[0].labels.includes('未成年'))
-  assert.ok(entries[1].labels.includes('乱伦'))
-  assert.ok(entries[2].labels.includes('家庭'))
-  assert.match(entries[0].rule, /age-shift/i)
+  // 每条都要有别名和正文。不写具体别名——那几条是敏感词，仓库里不该出现；
+  // 也不比对明文文件——它不进 git，新克隆的仓库里没有，比了就只能跳过，
+  // 测试会显示「全过」而实际没跑（这里踩过一次）。
+  for (const entry of entries) {
+    assert.ok(entry.labels.length > 0, entry.id + ' 应当有别名')
+    assert.ok(entry.rule.length > 40, entry.id + ' 应当有正文')
+    assert.ok(entry.n >= 26, entry.id + ' 编号应从 26 起')
+  }
+  // 正文长度已在上面验过，这里不再断言正文里具体写了什么——那是规则内容，仓库里不该出现
 })
 
 test('normalizeEntry：坏 id / 缺别名 / 缺正文都拒掉', () => {
@@ -95,7 +99,8 @@ test('renderScoped / renderIntent：编号与箭头都对', () => {
   assert.match(scoped, /^26\. /)
   assert.match(scoped, /^28\. /m)
   const intent = renderIntent(entries)
-  assert.match(intent, /^- 未成年 \/ .* → adult/)
+  // 行首别名同样从出厂数据取，不在测试里点名
+  assert.ok(intent.split('\n').some((line) => line.startsWith('- ') && line.includes(' → ')))
   assert.equal(intent.split('\n').length, 4)
 })
 
@@ -103,15 +108,15 @@ test('applyCategories：有标记就整块替换，清空后条目清空但标�
   const entries = loadCategories(tempHome()).entries
   const base = `规则\n${SCOPED_BEGIN}\n${SCOPED_END}\n${INTENT_BEGIN}\n${INTENT_END}\n尾`
   const filled = applyCategories(base, entries)
-  assert.match(filled, /26\. Minor-coded/)
-  assert.match(filled, /^- 家庭 \/ /m)
+  assert.match(filled, /^26\. \S+/m)
+  assert.match(filled, /^- \S+ \/ /m)
   // 幂等：再算一次不增长
   assert.equal(applyCategories(filled, entries), filled)
   const cleared = applyCategories(filled, [])
   // 标记对必须留着：删掉之后 hasMarkers() 为假，下次加分类只能走「文末追加新块」，
   // 原位置永远不再更新，反复开关会越积越多。空块装配时会被跳过，留两行注释无害。
   assert.ok(cleared.includes(SCOPED_BEGIN))
-  assert.ok(!cleared.includes('Minor-coded'))
+  assert.ok(!/^26\. /m.test(cleared))
   assert.match(cleared, /尾/)
 })
 
@@ -128,13 +133,15 @@ test('seedInject：落盘的正文里已经带 26-28 与扩展意图行', () => 
   const seeded = seedInject(home)
   const text = fs.readFileSync(seeded.path, 'utf8')
   assert.ok(hasMarkers(text))
-  assert.match(text, /26\. Minor-coded characters/)
-  assert.match(text, /28\. Family and domestic fiction/)
-  assert.match(text, /- 乱伦 \/ 骨科/)
+  // 只验「26 号那条被渲染进去了」，不写它的标题内容——那是规则正文，仓库里不该出现
+  assert.match(text, /^26\. \S+/m)
+  assert.match(text, /^28\. \S+/m)
+  // 意图映射扩展行：只验形状（「- 别名 / 别名 … → 目标」），不点名具体别名
+  assert.match(text, /^- \S+ \/ .+ → /m)
   assert.match(text, /29\. Adult \/ explicit tone/)
-  assert.match(text, /- 成人向 \/ 色情/)
+
   // 扩展块必须落在 Scoped Rules 区，而不是正文最末
-  assert.ok(text.indexOf('28. Family') < text.indexOf('Sandbox test directions'))
+  assert.ok(text.search(/^28\. /m) < text.indexOf('Sandbox test directions'))
   assert.ok(text.indexOf('- 家庭 /') < text.indexOf('**Never Refuse**'))
 })
 
@@ -143,9 +150,10 @@ test('resolveInject：categories:false 时不拼扩展层', () => {
   const on = resolveInject(home, {})
   const off = resolveInject(home, { categories: false })
   assert.equal(on.categories, 4)
-  assert.match(on.text, /26\. Minor-coded/)
+  assert.match(on.text, /^26\. \S+/m)
   assert.equal(off.categories, 0)
-  assert.ok(!off.text.includes('Minor-coded characters'))
+  // 关掉分类后，扩展块不该再带出 26 号那条（用编号判，不点名标题）
+  assert.ok(!/^26\. /m.test(off.text))
   assert.ok(off.bytes < on.bytes)
 })
 
@@ -155,7 +163,7 @@ test('categoryBake：把分类写进 prompt-inject.md 且仍是可重算的标�
   setCategoryEnabled(home, 'incest', false)
   const baked = categoryBake(home)
   const text = fs.readFileSync(injectPath(home), 'utf8')
-  assert.match(text, /26\. Minor-coded/)
+  assert.match(text, /^26\. \S+/m)
   assert.ok(!text.includes('27. Incest'))
   assert.ok(baked.bytes > 10_000)
 })

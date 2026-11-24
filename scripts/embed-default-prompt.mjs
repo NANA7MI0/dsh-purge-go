@@ -7,7 +7,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { sealSlot } from '../lib/table-key.js'
+import { sealBox } from '../lib/table-key.js'
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
 const src = path.join(root, 'assets', 'default-prompt.md')
@@ -25,7 +25,7 @@ if (!text.trim()) {
   process.exit(1)
 }
 
-const packed = sealSlot(text)
+const packed = sealBox(text)
 fs.writeFileSync(dest, JSON.stringify(packed, null, 2) + String.fromCharCode(10), 'utf8')
 const bytes = fs.statSync(dest).size
 process.stdout.write('已打包 ' + path.relative(root, dest) + '：源 ' + text.length + ' 字符 → 产物 ' + bytes + ' 字节' + String.fromCharCode(10))
