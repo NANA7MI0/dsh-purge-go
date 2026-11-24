@@ -342,7 +342,7 @@ cd "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)" && sh install.
 - **补丁改的是 `node_modules`**：升级引擎、或者装新版 App，都会把它整个重装一遍、补丁全丢（见上面 ①）。
 - **`node --check` 只验语法不验语义**：保证不把文件改坏，保证不了行为对。
 
-**⑤ 还解决不了**：发邮件到 **NANA7MI0@outlook.com**，写清版本号、引擎版本、`probe` 输出和具体现象。完整自查清单和邮件模板见 [出问题时自查](docs/troubleshooting.md)。
+**⑤ 还解决不了**：去 [GitHub Issues](https://github.com/NANA7MI0/dsh-purge-go/issues/new?template=bug_report.yml) 提一个，写清版本号、引擎版本、`probe` 输出和具体现象。完整自查清单见 [出问题时自查](docs/troubleshooting.md)。
 
 ---
 
@@ -490,6 +490,6 @@ ls ~/.dsh/dsh-go/plugins/ 2>/dev/null    # 没有 dsh-go-purge 就算干净
 
 **配套红队插件**是独立 bundle（上游 [`Jueze-2019/dsh-redteam-mode`](https://github.com/Jueze-2019/dsh-redteam-mode)，MIT），单独的仓库、单独的装法，不装完全不影响破甲。装法、它包含什么、装完怎么验、已知的上游问题都写在 [docs/redteam.md](docs/redteam.md)。
 
-**遇到问题**：装不上、面板报错、补丁打不上、行为跟文档对不上——先按对应章节自查（安装问题看 [安装](docs/install.md)，补丁看 [补丁层](docs/patches.md)，状态看不懂查 [状态含义](docs/states.md)）；还解决不了，发邮件到 **NANA7MI0@outlook.com**，要写清哪些东西见 [出问题时自查](docs/troubleshooting.md#遇到问题)。
+**遇到问题**：装不上、面板报错、补丁打不上、行为跟文档对不上——先按对应章节自查（安装问题看 [安装](docs/install.md)，补丁看 [补丁层](docs/patches.md)，状态看不懂查 [状态含义](docs/states.md)）；还解决不了，去 [GitHub Issues](https://github.com/NANA7MI0/dsh-purge-go/issues/new?template=bug_report.yml) 提一个，要写清哪些东西见 [出问题时自查](docs/troubleshooting.md#遇到问题)。
 
 其他入口：目录与文件结构见 [docs/structure.md](docs/structure.md)，每个版本改了什么见 [CHANGELOG.md](CHANGELOG.md)。

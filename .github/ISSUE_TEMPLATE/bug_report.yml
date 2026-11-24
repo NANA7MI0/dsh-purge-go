@@ -1,0 +1,65 @@
+name: 出问题了
+description: 装不上、面板报错、补丁打不上、行为跟文档对不上
+title: "[问题] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        先说清楚：**大部分问题按 [出问题时自查](https://github.com/NANA7MI0/dsh-purge-go/blob/main/docs/troubleshooting.md) 走一遍就能解决**，建议先看。
+
+  - type: textarea
+    id: what
+    attributes:
+      label: 出了什么问题
+      description: 一句话说清就行
+      placeholder: 比如「点了应用之后面板一直转圈，重启也没用」
+    validations:
+      required: true
+
+  - type: textarea
+    id: detail
+    attributes:
+      label: 具体现象
+      description: 点了什么、看到什么、你期望是什么
+      placeholder: |
+        1. 我点了一键注入
+        2. 面板显示「补丁 0/58」
+        3. 我期望是 58/58
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: 插件版本号
+      description: 面板最下面能看到，形如 0.7.0
+      placeholder: "0.7.0"
+    validations:
+      required: true
+
+  - type: input
+    id: engine
+    attributes:
+      label: 引擎版本
+      description: 面板里「引擎」那一行能看到，形如 0.2.2-rc.1
+      placeholder: "0.2.2-rc.1"
+    validations:
+      required: true
+
+  - type: textarea
+    id: probe
+    attributes:
+      label: probe 输出
+      description: 跑这条命令的完整输出（不会跑可以不填）
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: 截图 / 补充
+      description: 截图直接拖进来就行
+    validations:
+      required: false

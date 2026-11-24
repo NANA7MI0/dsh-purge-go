@@ -119,11 +119,11 @@ node patches/purge-patch.mjs apply --dry
 
 装不上、面板报错、补丁打不上、行为跟文档对不上——先按对应的章节自查一遍（安装问题看 [安装](../README.md#1-安装)，补丁看 [补丁层](patches.md)，状态看不懂查 [状态含义](states.md)）。
 
-**自查之后还没解决，发邮件到：NANA7MI0@outlook.com**
+**自查之后还没解决，去 [GitHub Issues](https://github.com/NANA7MI0/dsh-purge-go/issues/new?template=bug_report.yml) 提一个**
 
 写清楚这几样，能省不少来回：
 
-- 你那个版本的版本号（`node -p "require(process.env.HOME+'/dsh-purge-go/package.json').version"`）
+- 你那个版本的版本号（面板最下面能看到；要看精确值就 `cd "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)" && node -p "require('./package.json').version"`）
 - 引擎版本（`node -p "require('/opt/dsh/node_modules/@deepseek-ai/dsh-base/package.json').version"`）
 - `probe` 的输出（`node patches/purge-patch.mjs probe`）
 - 具体现象：点了什么、看到什么、期望是什么

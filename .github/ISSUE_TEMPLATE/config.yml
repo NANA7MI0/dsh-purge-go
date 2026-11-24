@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 先自查一遍
+    url: https://github.com/NANA7MI0/dsh-purge-go/blob/main/docs/troubleshooting.md
+    about: 装不上、补丁打不上、面板状态看不懂——这份清单能解决大部分问题
+  - name: 看已知限制
+    url: https://github.com/NANA7MI0/dsh-purge-go#4-已知限制
+    about: 有些现象是设计如此，不是 bug（比如只对新会话完全生效、升级引擎补丁会丢）
