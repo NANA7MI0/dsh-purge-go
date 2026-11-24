@@ -4,6 +4,7 @@
 // 这里把能机械核的全核了，核不了的（叙述角度、锚点语义）留给人看。
 import fs from 'node:fs'
 import path from 'node:path'
+import { execSync } from 'node:child_process'
 import { probe, tally, SUPPORTED_ENGINES } from '../patches/lib/core.mjs'
 import { patchAdvice, registerTools } from '../lib/tools.js'
 import { buildView, collect } from '../lib/dshgo.js'
@@ -163,6 +164,32 @@ console.log('\n【6】文件结构')
     const tm = structDoc.match(/test\/\s+(\d+) 个文件/)
     if (tm && Number(tm[1]) !== tN) fail('structure.md 说 test 有 ' + tm[1] + ' 个文件，实际 ' + tN)
     pass('structure.md 与实际文件对照完成')
+
+    // README 体积表里的「N 个文件」也要和 git ls-files 对上。
+    // 这一条以前没人查：structure.md 改对了，README 那张表还写着 64，两个数字各说各话。
+    const readme = read('README.md')
+    const vm = readme.match(/体积 \|\s*(\d+) 个文件/)
+    if (!vm) {
+      console.log('    ⚠ README 体积表没写文件数')
+    } else {
+      // git ls-files 要包 try/catch：README 教用户的归档安装方式解出来没有 .git，
+      // 那种目录里跑这个脚本会抛 ChildProcessError，把后面【7】【8】两组带崩。
+      let tracked = null
+      try {
+        tracked = execSync('git ls-files', { cwd: ROOT, encoding: 'utf8' }).trim().split('\n').filter(Boolean).length
+      } catch {
+        console.log('    ⚠ 没有 .git 或 git 不可用，跳过文件数核对')
+      }
+      if (tracked !== null) {
+        // 必须 if/else：fail() 只计数不 return，写成 if + 无条件 pass 的话
+        // 同一件事会同时打「✖ 实际 73」和「✔ 一致（73）」，自相矛盾。
+        if (Number(vm[1]) !== tracked) {
+          fail('README 体积表说 ' + vm[1] + ' 个文件，git ls-files 实际 ' + tracked)
+        } else {
+          pass('README 体积表的文件数与 git 一致（' + tracked + '）')
+        }
+      }
+    }
   }
 }
 

@@ -46,20 +46,25 @@ README 现在只有 9 章，从「它是什么」一路读到「来源」即可�
 ```
 docs/             截图 3 张（panel-status.jpg 面板 · app-all-features.jpg 与 app-terminal.jpg 安装步骤）
                   + 说明 8 份（install / tools / patches / states / restore / troubleshooting / structure / redteam）
-lib/              注入层与原生界面：23 个 .js 模块 + 1 个数据文件（早期部分模块来自 LanJinGod，其余是本仓库加的）
+lib/              注入层与原生界面：24 个 .js 模块 + 1 个数据文件（早期部分模块来自 LanJinGod，其余是本仓库加的）
   asset-table.json  正文密文（原始 md 不进仓库，解出来的办法见 docs/tools.md）
+  backup-files.js   备份缺哪些文件（prepare 与 topup 共用这一份，别再造第二份）
 assets/           categories.json（题材分类出厂值）
 patches/          patches.json（86 条）
-  purge-patch.mjs   CLI 壳（只做参数解析与输出）
+  purge-patch.mjs   CLI 壳（只做参数解析与输出；每次结束打一行 __RESULT__ {json} 给 install.sh 判断分支）
   lib/core.mjs      纯函数库（probe / apply / restore / isDone / verifyFile）
+  lib/settle-steps.mjs  更新后的收尾六步（settle.mjs 与 update-worker.mjs 共用同一份）
+  lib/replace-repo.sh   用新代码整份替换仓库（面板、worker、归档更新共用；先铺新的再删多余的，中途被打断也能启动）
+  update-archive.sh     连不上 github.com 时的归档更新入口（下载 → 解包 → 调 replace-repo.sh → 跑 install.sh）
 scripts/          engine-smoke.mjs（段注册与 assemble 重排验证）· kit-check.mjs（插件规范检查，需外部 plugin-kit）
                   · embed-default-prompt.mjs（正文打包）· dump-prompt.sh（打印注入正文明文）
-test/             11 个文件，分三类：
-                    · 单元测试 8 个（*.test.js，node --test 跑）
+test/             14 个文件，分三类：
+                    · 单元测试 12 个（*.test.js，node --test 跑）
                     · 场景测试 scenarios.mjs（造真实故障状态，验用户看到的那句话对不对）
                     · 一致性检查 consistency.mjs（版本号 / 面板描述 / 补丁数字 / 状态词 /
-                      工具名 / 文件结构 / README 锚点，逐项与代码对照）
-install.sh        一键装：打补丁 → 建原生界面目录 → 装插件
+                      工具名 / 文件结构 / README 锚点 / 跨文件锚点，逐项与代码对照。
+                      注意它查的是「数字与锚点」，不查散文描述是否还准确——改行为后要自己核文案）
+install.sh        一键装：打补丁 → 建原生界面目录 → 写 ui.json 隐藏旧胶囊 → 装插件
 cordis.patch.yml  插件插入声明
 package.json      清单（name / version / engines.dsh / dsh.bundle.patch）
 LICENSE           AGPL-3.0 全文
@@ -69,7 +74,7 @@ CHANGELOG.md      更新日志（每个版本改了什么）
 .gitignore        排除 backup-*/ 、patch-probe.json 这类运行时产物
 ```
 
-合计 **64 个文件、约 1.17 MB**（`git ls-files` 全量，含 `docs/` 下 3 张截图与 8 份说明；体积会随版本小幅变化）。
+合计 **73 个文件、约 1.2 MB**（`git ls-files` 全量，含 `docs/` 下 3 张截图与 8 份说明；体积会随版本小幅变化）。
 
 **运行时才会出现的（不进 git，`ls` 能看到别以为多了）：**
 

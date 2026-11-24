@@ -95,9 +95,12 @@ const readVersion = (dir) => {
   }
 }
 
-const fail = (reason) => {
-  log('fail', 'abort', { reason })
-  setState({ status: 'failed', error: String(reason).slice(0, 160) })
+// kind 是给排障用的分类（old_node / download_failed / …），会写进 update-state.json 的 errorKind；
+// 界面只显示 reason，但用户来报问题时我们能一眼看出是哪一类。
+// 以前这个函数只收一个参数，调用处传的第二参数被默默丢掉，等于分类从来没生效过。
+const fail = (reason, kind) => {
+  log('fail', 'abort', { reason, kind: kind || '' })
+  setState({ status: 'failed', error: String(reason).slice(0, 160), errorKind: kind || '' })
   process.exit(1)
 }
 
@@ -121,14 +124,43 @@ if (!via) {
   const dirty = await run(repo, 'git', ['status', '--porcelain', '--untracked-files=no'], 15_000)
   if (dirty.out.trim()) fail('仓库有本地改动，先 commit 或 stash')
   const tmp = '/tmp/dshpurge-update-' + Date.now()
+  const tgz = tmp + '/repo.tgz'
+  fs.mkdirSync(tmp, { recursive: true })
+
+  // 用 node 自己下载，不调 curl：实测有平板（dsh-go 装在平板上）根本没装 curl，
+  // 连 wget 都没有。那种机器上这条路永远失败，用户看到的是「更新失败」却没原因。
+  // node 22+ 自带 fetch，不用装任何东西。
+  // node 18 以下没有内置 fetch。不先判一下的话，报出来的是
+  // 「fetch is not defined」——用户根本不知道该怎么办。
+  if (typeof fetch !== 'function' || typeof AbortSignal?.timeout !== 'function') {
+    fail('当前 node 版本太老（没有内置 fetch / AbortSignal.timeout），升级到 18 以上再试。当前：' + process.version, 'old_node')
+  }
+  try {
+    // 必须带超时：fetch 默认不超时，网络半死不活时会永久挂着，用户看到的是「正在后台更新」永不结束。
+    // 60 秒够下 ~1.5 MB 的仓库归档，慢网也不至于误杀。
+    const res = await fetch(TARBALL, { signal: AbortSignal.timeout(60_000) })
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+    const buf = Buffer.from(await res.arrayBuffer())
+    if (buf.length < 1024) throw new Error('下载到的内容只有 ' + buf.length + ' 字节，不像压缩包')
+    fs.writeFileSync(tgz, buf)
+    log('download', 'ok', { bytes: buf.length })
+  } catch (error) {
+    fail('下载仓库归档失败（' + String(error && error.message).slice(0, 60) + '）。检查网络后重试。')
+  }
+
+  // 覆盖这件事交给 patches/lib/replace-repo.sh：它先铺新的、再删多余的，
+  // 中途被打断也不会留下空仓库；.git 与 node_modules 一概不动。
+  // 以前这段是 here-string 拼出来的，update-worker 和 dshgo.js 各一份、还分叉过。
+  // 注意传的是 repo（插件仓库），不是 root（引擎目录）——
+  // 传错会把整个插件仓库铺进 @deepseek-ai/，实测过一次，引擎目录被污染 12 项。
   const script =
-    'set -e; mkdir -p "' + tmp + '"; ' +
-    'curl -sL --max-time 60 "' + TARBALL + '" | tar xz -C "' + tmp + '"; ' +
+    'set -e; ' +
+    'tar xzf "' + tgz + '" -C "' + tmp + '"; ' +
     'SRC=$(ls -d "' + tmp + '"/*/ | head -1); ' +
-    // 注意这里是 repo（插件仓库），不是 root（引擎目录）——
-    // 写成 root 会把整个插件仓库铺进 @deepseek-ai/，实测过一次，引擎目录被污染 12 项。
-    'cp -a "$SRC". "' + repo + '/"; ' +
-    'rm -rf "' + tmp + '"'
+    'sh "' + path.join(path.dirname(new URL(import.meta.url).pathname), 'lib', 'replace-repo.sh') + '" "$SRC" "' + repo + '"; ' +
+    // || true：前面任何一步失败时 set -e 会直接退出，这句就不跑了，/tmp 留一份归档。
+    // 而且它一旦非 0 还会让整条 sh -c 非 0，导致「其实换成了却报失败、也不跑 settle」。
+    'rm -rf "' + tmp + '" || true'
   const fb = await run(repo, 'sh', ['-c', script], 120_000)
   log('fallback', fb.code === 0 ? 'ok' : 'failed', { code: fb.code, err: String(fb.err || '').slice(0, 120) })
   if (fb.code !== 0) fail('下载或覆盖失败：' + String(fb.err || fb.out || '').slice(0, 80))
@@ -153,9 +185,9 @@ try {
   fail('加载插件模块失败：' + String(error && error.message).slice(0, 80))
 }
 
-const { patchRevert, patchApply } = mods.ops
-const { syncNative } = mods.sync
-const { setEnabled, readState } = mods.state
+// 只留这行用到的；其余解构（patchRevert/patchApply/syncNative/setEnabled）
+// 已经搬进 lib/settle-steps.mjs，留着会变成「看着在用、其实没人调」的死变量。
+const { readState } = mods.state
 
 let wasOn = true
 try {
@@ -164,66 +196,19 @@ try {
   wasOn = true
 }
 
-const problems = []
-try {
-  if (wasOn) setEnabled(home, false)
-  log('inject-off', 'ok')
-} catch (error) {
-  problems.push('关注入失败')
-  log('inject-off', 'failed', { error: String(error && error.message) })
-}
-
-// 还原前先补齐备份：补丁目标会长大，老备份覆盖不全，
-// 不补就会「47 个目标只还原 41 个」，剩下几个永远带着补丁标记。
-try {
-  const prep = await mods.prepare.prepareBackup(home, { root })
-  if (prep.filled.length) log('topup', 'ok', { filled: prep.filled.length, failed: prep.failed.length })
-  else if (prep.failed.length) log('topup', 'failed', { failed: prep.failed.slice(0, 3) })
-} catch (error) {
-  log('topup', 'threw', { error: String(error && error.message) })
-}
-
-try {
-  const rv = patchRevert(home, { root })
-  if (rv && rv.ok === false) {
-    problems.push('补丁没还原全')
-    log('revert', 'incomplete', { reason: String(rv.reason || '').slice(0, 120) })
-  } else {
-    log('revert', 'ok', { restored: rv && rv.restored })
-  }
-} catch (error) {
-  problems.push('还原补丁失败')
-  log('revert', 'failed', { error: String(error && error.message) })
-}
-
-try {
-  const ap = patchApply(home, { root })
-  if (ap && ap.ok === false) {
-    problems.push('补丁没打全')
-    log('apply', 'incomplete', { applied: ap.applied, errors: (ap.errors || []).length })
-  } else {
-    log('apply', 'ok', { applied: ap && ap.applied })
-  }
-} catch (error) {
-  problems.push('重打补丁失败')
-  log('apply', 'failed', { error: String(error && error.message) })
-}
-
-try {
-  const r = syncNative(root)
-  log('sync-native', 'ok', { copied: r && r.copied })
-} catch (error) {
-  problems.push('原生目录没同步')
-  log('sync-native', 'failed', { error: String(error && error.message) })
-}
-
-try {
-  if (wasOn) setEnabled(home, true)
-  log('inject-on', 'ok')
-} catch (error) {
-  problems.push('恢复注入失败')
-  log('inject-on', 'failed', { error: String(error && error.message) })
-}
+// 收尾六步统一走 lib/settle-steps.mjs —— 和 settle.mjs 共用同一份。
+// 以前两处各写一遍、只有这里带 topUp，于是「点按钮能补备份、跑 install.sh 不能」，
+// 同一台机器两条路结果不同。
+// 不能复用上面 try 块里的 here（const 在块内），这里重算一次路径。
+const { runSettleSteps } = await import(
+  path.join(path.dirname(new URL(import.meta.url).pathname), 'lib', 'settle-steps.mjs'),
+)
+const { problems } = await runSettleSteps({
+  home, root, wasOn,
+  ops: mods.ops, sync: mods.sync, state: mods.state,
+  prepare: mods.prepare,   // 只有这条路径补备份：它跑在「拉完新代码、还没还原」的时刻
+  log,
+})
 
 setState({
   status: problems.length ? 'done-with-problems' : 'done',

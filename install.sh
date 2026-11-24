@@ -5,6 +5,9 @@
 #   sh install.sh --plugin-only   只装插件，不打补丁（注入层生效，引擎限制仍在）
 #   sh install.sh --dry           只扫描 + 预演补丁，什么都不改
 #   sh install.sh --profile web   指定 profile（默认 web）
+#   sh install.sh --force-dirty-backup  引擎还留着上次补丁时强行往下走（一般别用）
+#   sh install.sh --no-topup      不从 npm 补老备份里缺的文件（排障用，会更容易判「备份不完整」）
+#   sh install.sh --repair-native 只重建原生界面目录 + 隐藏旧胶囊（不碰补丁、不重装插件）
 #
 # 注意：每次更新 App（装新版 APK）都会重装引擎包、把补丁冲掉，
 #       之后要重跑一次本脚本，或者跟插件说一句「重打补丁」。
@@ -19,6 +22,8 @@ PROFILE=web
 MODE=full
 
 DRY=0
+FORCE_DIRTY=0
+NO_TOPUP=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --plugin-only) MODE=plugin; shift ;;
@@ -27,6 +32,11 @@ while [ $# -gt 0 ]; do
     # --dry 单独一个开关，不跟 MODE 抢变量：原来两者共用 MODE，后出现的会覆盖前面的，
     # 于是 `--dry --plugin-only` 反而会真的装插件。
     --dry)         DRY=1; shift ;;
+    # 脏引擎确认强行往下走。purge-patch.mjs 的报错文案里让用户加这个参数，
+    # 但本脚本以前不认它——用户照着提示敲，得到的是「不认识的参数」。
+    # 现在原样透传给 CLI（CLI 那边本来就有实现）。
+    --force-dirty-backup) FORCE_DIRTY=1; shift ;;
+    --no-topup)    NO_TOPUP=1; shift ;;
     --profile)
       if [ -z "$2" ]; then
         printf '✖ --profile 后面要跟 profile 名（例如 web）\n' >&2; exit 1
@@ -34,7 +44,7 @@ while [ $# -gt 0 ]; do
       PROFILE=$2; shift 2 ;;
     --profile=*)   PROFILE=${1#--profile=}; shift ;;
     -h|--help)
-      sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
       exit 0 ;;
     *) printf '✖ 不认识的参数：%s\n' "$1" >&2; exit 1 ;;
   esac
@@ -42,6 +52,20 @@ done
 
 say() { printf '%s\n' "$*"; }
 
+# ── 读机器可读结果行 ────────────────────────────────────────────────
+# purge-patch.mjs 每次结束会打一行「__RESULT__ {json}」。本脚本只看这一行判断走哪个分支。
+#
+# 为什么不 grep 中文提示语：原来 6 处分支靠 grep「还留着上次打的补丁」「本插件只适配过」
+# 这类文案，改一句提示就静默走错，最后落到 else 说「引擎可能已被部分修改」，
+# 把人吓去白重装一次引擎。这些字符串分散在 core.mjs 与 purge-patch.mjs 两个文件里，
+# 改的人根本想不起另一处。
+#
+# 纯 sed 实现、不启 node：只取一行 JSON 里的简单字段，够用且快。
+# 用法：result_field "$OUT" kind
+result_field() {
+  printf '%s' "$1" | grep '^__RESULT__ ' | tail -1 \
+    | sed -n 's/.*"'"$2"'":\([^,}]*\).*/\1/p' | tr -d '"'
+}
 # --dry 是「只看不改」，--plugin-only 是「只装插件不打补丁」，两个一起给没有意义，
 # 而且会让调用者以为拿到的是预演结果。直接拒绝，别让顺序决定行为。
 # 原来只挡了 --plugin-only，漏了 --repair-native：那两个模式下 --dry 会被完全忽略，
@@ -90,32 +114,35 @@ else
     say "  扫描中 …"
     # --dry 时 probe 结果写到临时目录，别往仓库里留文件（见下面的「什么都没改」）
     if [ "$DRY" = "1" ]; then
-      PROBE_OUT_PATH="$(mktemp -d)/patch-probe.json"
+      # 记一下这个临时目录，退出时清掉——不加这句每跑一次 --dry 就在 /tmp 留个空目录。
+      PROBE_TMP=$(mktemp -d)
+      PROBE_OUT_PATH="$PROBE_TMP/patch-probe.json"
+      trap 'rm -rf "$PROBE_TMP"' EXIT
     else
       PROBE_OUT_PATH="$HERE/patch-probe.json"
     fi
     if ! PROBE_OUT=$(node patches/purge-patch.mjs probe --out "$PROBE_OUT_PATH" 2>&1); then
-      say "$PROBE_OUT" | sed 's/^/  /'
+      say "$PROBE_OUT" | grep -v '^__RESULT__ ' | sed 's/^/  /'
       die "probe 失败。"
     fi
-    say "$PROBE_OUT" | grep -E '^tally:' | sed 's/^/  /' || true
+    say "$PROBE_OUT" | grep -E '^tally:' | grep -v '^__RESULT__ ' | sed 's/^/  /' || true
     say ""
 
     if [ "$DRY" = "1" ]; then
       # 不能 node ... | sed 然后无条件报成功：if 看的是 sed 的退出码，恒 0，
       # 补丁预演炸了也照样印「预演完成」。先收输出、按 node 自己的退出码判。
       if DRY_OUT=$(node patches/purge-patch.mjs apply --dry 2>&1); then
-        printf '%s\n' "$DRY_OUT" | sed 's/^/  /'
+        printf '%s\n' "$DRY_OUT" | grep -v '^__RESULT__ ' | sed 's/^/  /'
         say ""
         say "  ✔ 预演完成，什么都没改。"
         say "  真安装请去掉 --dry 重跑：sh install.sh"
         say ""
         exit 0
       else
-        printf '%s\n' "$DRY_OUT" | sed 's/^/  /'
+        printf '%s\n' "$DRY_OUT" | grep -v '^__RESULT__ ' | sed 's/^/  /'
         # 版本没适配也会让 --dry 返回非 0，那不是「预演失败」，是「明确告诉你打不了」，
         # 两者对用户的意思完全不同：前者要查，后者只要等。先分流。
-        if printf '%s' "$DRY_OUT" | grep -q '本插件只适配过'; then
+        if [ "$(result_field "$DRY_OUT" kind)" = "engine_unsupported" ]; then
           die "引擎版本本插件还没适配，所以预演也打不了。这不是故障——等插件发新版适配即可。"
         fi
         die "预演本身失败了（上面的输出里有原因）。这不是「什么都没改」，是没能判断该改什么。"
@@ -134,14 +161,21 @@ else
     # 不能写成 `if node ... | sed`：if 看的是管道最后一个命令（sed）的退出码，
     # sed 恒返回 0，于是补丁全失败也照样打印「✔ 补丁已打上」并以 0 退出。
     # 先把输出收进变量、按 node 自己的退出码判断，再决定要不要打印。
-    if APPLY_OUT=$(node patches/purge-patch.mjs apply --backup "$BACKUP_DIR" 2>&1); then
-      printf '%s\n' "$APPLY_OUT" | sed 's/^/  /'
+    # 透传两个开关：CLI 的报错文案里提到过它们，脚本不认就等于提示无效。
+    APPLY_ARGS=""
+    [ "$FORCE_DIRTY" = "1" ] && APPLY_ARGS="$APPLY_ARGS --force-dirty-backup"
+    [ "$NO_TOPUP" = "1" ] && APPLY_ARGS="$APPLY_ARGS --no-topup"
+    # shellcheck disable=SC2086
+    if APPLY_OUT=$(node patches/purge-patch.mjs apply --backup "$BACKUP_DIR" $APPLY_ARGS 2>&1); then
+      printf '%s\n' "$APPLY_OUT" | grep -v '^__RESULT__ ' | sed 's/^/  /'
       # applied 是「这次改了几个文件」。为 0 说明一条都没新打（引擎已是全打上的状态、
       # 或这批补丁都对不上）——这时报「✔ 补丁已打上」并列出刚 mkdir 出来的空目录，
       # 用户之后点「还原补丁」只会撞一个没有 manifest 的空壳。所以要分开说。
       # 末尾的 || true 不能省：set -e 下 grep 没匹配会返回 1，整条赋值失败 → 脚本静默退出，
       # 下面的「取不到数」分支根本走不到，用户只会看到命令无声结束。
-      APPLIED_N=$(printf '%s' "$APPLY_OUT" | grep -o 'applied [0-9]* file' | tail -1 | grep -o '[0-9]*') || true
+      # 从结果行读，不再 grep 日志文本——「applied N file」这句以后改措辞就失效了，
+      # 和这次统一 __RESULT__ 是同一件事。
+      APPLIED_N=$(result_field "$APPLY_OUT" applied)
       # 取不到数字（输出格式变了、或压根没有 applied 行）与「真的是 0」必须分开：
       # 前者是「不知道」，绝不能当成 0 去删备份。
       # APPLIED_N 为空 = 没打出 applied N file 行（最常见的原因就是一条都没打，
@@ -181,7 +215,7 @@ else
         say "    （面板上的「还原补丁」用的就是这里）"
       fi
     else
-      printf '%s\n' "$APPLY_OUT" | sed 's/^/  /'
+      printf '%s\n' "$APPLY_OUT" | grep -v '^__RESULT__ ' | sed 's/^/  /'
       # 这次 mkdir 出来的目录如果是空壳（apply 在写 manifest 之前就失败了），删掉。
       # 留着的话：下次 realBackup()/findReusableBackup() 会挑到「最新的一份」，
       # 而那里面没有 manifest，读失败——实测把整条「先还原再重打」卡死过一次。
@@ -198,9 +232,9 @@ else
       #   ⓿ 引擎版本没适配 → 一个字节都没动，别按「半截」吓人。
       #      core.apply 的版本门在任何写操作之前就返回，这个分支必须先判，
       #      否则会落到最后一个 else 说「引擎包可能已被部分修改」，用户会去白重装一次引擎。
-      if printf '%s' "$APPLY_OUT" | grep -q '本插件只适配过'; then
+      if [ "$(result_field "$APPLY_OUT" kind)" = "engine_unsupported" ]; then
         die "补丁没打上：当前引擎版本本插件还没适配，一个文件都没动（引擎完好）。等插件发新版适配，别强行重装去试。看上面那句里的版本号。"
-      elif printf '%s' "$APPLY_OUT" | grep -q '还留着上次打的补丁'; then
+      elif [ "$(result_field "$APPLY_OUT" kind)" = "dirty_engine" ]; then
         # 脏引擎：引擎里还有上次打的补丁，所以拒绝把它存成「原始状态」。
         # 这个场景**必须重装引擎包**——不重装永远建不出干净备份，补丁永远打不上。
         # 不能并到下面「不用重装」那支里（第十九轮实测：那样上下两行互相打架，
@@ -220,18 +254,27 @@ else
         # （拿到非 null 它会先还原，根本不会脏着继续）。同一个函数、同样的参数、
         # 同一个时刻，这里再查一次必然是 null——那是段死查询，白扫 0.3～0.45 秒。
         BACKUP_DIR=""
-      elif printf '%s' "$APPLY_OUT" | grep -q '备份不完整'; then
+      elif [ "$(result_field "$APPLY_OUT" kind)" = "incomplete_backup" ]; then
         # 备份缺文件：一个字节都没动，但**出路是重装**（CLI 那句第一选项就是重装）。
         # 不能跟下面「不用重装」混在一支——第二十轮实测：照「删备份重跑」做，
         # 删完立刻落到脏引擎分支再要求重装，白跑一轮。
         die "补丁没打上：一个字节都没动（引擎完好）。这份备份缺文件，删掉它重跑也行，但更省事的是直接重装引擎包（见 README 第 6 章），然后重跑本脚本。"
-      elif printf '%s' "$APPLY_OUT" | grep -q '没有动引擎'; then
-        # restore 前的检查发现了问题，没动过引擎。这类按上面那句处理就能走通，不必重装。
-        die "补丁没打上：一个字节都没动（引擎完好）。按上面那句说的做就行，不用重装引擎。"
-      elif printf '%s' "$APPLY_OUT" | grep -q 'ROLLBACK INCOMPLETE'; then
+      elif [ "$(result_field "$APPLY_OUT" kind)" = "restore_partial" ]; then
+        # 还原到一半出错：core.restore 逐文件复制，前面的已经写回去了，引擎不确定是否完好。
+        # 这里**必须**让人重装——说成「一个字节都没动」会让人带着半截引擎继续用。
+        die "补丁没打上，而且这次是「还原到一半出的错」——引擎可能停在半截状态（一部分原始、一部分还是打过补丁的）。先别重启，按 README 第 6 章重装引擎包，再重跑本脚本。"
+      elif [ "$(result_field "$APPLY_OUT" kind)" = "rollback_incomplete" ]; then
         die "补丁打了一半、回滚也没滚干净——引擎可能已是半截状态，App 可能起不来。别重启，先看上面的日志，必要时重装引擎包。"
-      elif printf '%s' "$APPLY_OUT" | grep -qE '已还原到原始状态|rolled back: all files restored'; then
-        die "补丁没打上。上面的日志里写着是否回滚干净：看到 rolled back / 已还原到原始状态 就是干净的；看到残留或半截提示，就要重装引擎包（见 README 第 6 章）。跑 sh install.sh --dry 看是哪条打不上。"
+      elif [ "$(result_field "$APPLY_OUT" kind)" = "apply_failed" ]; then
+        # core.apply 自己抛了异常，没走到回滚那套逻辑。说不准改了没有，按最坏的说。
+        die "打补丁时程序出错了，没能确认引擎有没有被改。先跑 sh install.sh --dry 看当前状态；还是不对劲就按 README 第 6 章重装引擎包。"
+      elif [ "$(result_field "$APPLY_OUT" kind)" = "no_root" ]; then
+        # 找不到引擎目录：一个字节都没动，重装引擎包也不解决——根本没找到要改哪儿。
+        die "找不到引擎目录（/opt/dsh/node_modules/@deepseek-ai 之类）。这不是引擎坏了，是这个插件没装上或装到别处了；先重装 App 或确认引擎版本，再跑本脚本。"
+      elif [ "$(result_field "$APPLY_OUT" clean)" = "true" ]; then
+        # clean=true 表示引擎现在是干净的原始状态（要么打之前还原过、要么 core 全量回滚成功）。
+        # 以前这里还让用户自己去日志里找「rolled back」，等于没结论。
+        die "补丁没打上，但引擎是干净的原始状态，不用重装。跑 sh install.sh --dry 看是哪条打不上；要还是不行，来提 issue（附上 --dry 的输出）。"
       else
         die "打补丁失败，且没能确认回滚干净——引擎包可能已被部分修改。跑 sh install.sh --dry 看状态，或查 patch-probe.json。"
       fi
@@ -375,18 +418,20 @@ say ""
 # 于是插件根本没装上也会报「✔ 插件已装入」并 exit 0——用户拿到一个空插件却以为装好了。
 # 与上面补丁那段是同一个坑：先把输出收进变量、按 dsh 自己的退出码判断。
 if PLUGIN_OUT=$(dsh plugin --profile "$PROFILE" add "$HERE" 2>&1); then
-  printf '%s\n' "$PLUGIN_OUT" | sed 's/^/  /'
+  printf '%s\n' "$PLUGIN_OUT" | grep -v '^__RESULT__ ' | sed 's/^/  /'
   say "  ✔ 插件已装入"
   PLUGIN_OK=1
 else
-  printf '%s\n' "$PLUGIN_OUT" | sed 's/^/  /'
+  printf '%s\n' "$PLUGIN_OUT" | grep -v '^__RESULT__ ' | sed 's/^/  /'
   # 返回非零不一定是真失败。实测最常见的原因是 dsh-atomic-write 的写锁超时
   # （另一个进程正持有锁，pnpm add 拿不到），而依赖其实已经写进 profile 了。
   # 与其让用户自己去敲命令核对，不如这里直接读一次 profile。
-  DEP_LINE=$(node -e '
+  # 读的是「本次装的 profile」，不是写死的 web：加了 --profile other 时读错目录，
+  # 会把「装配失败但依赖已在 other 里」误判成「真没装上」，让用户白重装一遍。
+  DEP_LINE=$(DSH_PROFILE_CHECK="$PROFILE" node -e '
     try {
       const h = (process.env.DSH_HOME || process.env.HOME + "/.dsh")
-      const j = require(h + "/profiles/web/package.json")
+      const j = require(h + "/profiles/" + process.env.DSH_PROFILE_CHECK + "/package.json")
       const v = j && j.dependencies && j.dependencies["dsh-go-purge"]
       if (v) process.stdout.write(String(v))
     } catch {}
@@ -405,12 +450,18 @@ else
   say ""
 fi
 
+fi
+
 # ── 收尾 ────────────────────────────────────────────────────────
 say ""
 say "════════════════════════════════════════"
 # dsh plugin add 返回非零时不能还说「装好了」——那时插件可能压根没装上，
 # 用户拿着一个空插件去重启、打开面板发现什么都没有，只能猜。
-if [ "${PLUGIN_OK:-0}" = "1" ]; then
+if [ "$MODE" = "repair" ]; then
+  # repair 根本不装插件，PLUGIN_OK 永远为空。以前会打出「装完了，但插件是否装上没确认」，
+  # 等于在说一件这次没做的事。
+  say " 原生界面目录修好了"
+elif [ "${PLUGIN_OK:-0}" = "1" ]; then
   say " 装好了"
 else
   # 返回非零不等于没装上（旧版上装配会掐断命令），所以这里不能断言失败——
@@ -419,7 +470,10 @@ else
 fi
 say "════════════════════════════════════════"
 say ""
-if [ "${PLUGIN_OK:-0}" = "1" ]; then
+if [ "$MODE" = "repair" ]; then
+  # 同上：不做的事就别报状态。
+  say "  注入层  — 本次没动（--repair-native 不碰插件）"
+elif [ "${PLUGIN_OK:-0}" = "1" ]; then
   say "  注入层  ✔ 插件加载时自动落盘正文并开启"
 elif [ "${PLUGIN_FAILED:-0}" = "1" ]; then
   say "  注入层  ✖ 插件没装上，注入层不会生效"
@@ -431,7 +485,10 @@ fi
 #   --plugin-only        → 本来就没打
 #   脏引擎跳过（SKIPPED） → 走到这里是因为拒绝把已打补丁的引擎存成原始状态
 #   其余                 → 正常打上了
-if [ "$MODE" = "plugin" ]; then
+if [ "$MODE" = "repair" ]; then
+  # --repair-native 本来就不碰补丁：这里报「已打到引擎包」是假的，用户会以为补丁是新的。
+  say "  补丁层  — 本次没动（--repair-native 只重建原生界面目录）"
+elif [ "$MODE" = "plugin" ]; then
   say "  补丁层  ✖ 没打（本次用了 --plugin-only）"
   say "           想补上就跑：cd $HERE && sh install.sh"
 elif [ "${APPLY_SKIPPED:-}" = "1" ]; then
@@ -442,10 +499,22 @@ else
 fi
 say ""
 # 补丁没打上（或跳过）时说「让补丁生效」是空的——重启也不会有效果。
-if [ "${APPLY_SKIPPED:-}" = "1" ] || [ "$MODE" = "plugin" ]; then
+if [ "$MODE" = "repair" ]; then
+  # 这条分支以前漏了：上面刚说「补丁层本次没动」，这里又说「重启让补丁生效」，
+  # 用户当场就能看出自相矛盾。repair 做的是重建原生界面目录，重启是为了让它生效。
+  say "▸ 最后一步：重启 App 让原生界面重建生效"
+  say ""
+  say "  （这次没打补丁，重启不会改变补丁层）"
+elif [ "$MODE" = "plugin" ]; then
+  # --plugin-only 时引擎是干净的、只是这次没打。不能说「要先重装引擎包」——
+  # 那和上面「想补上就跑 sh install.sh」当面打架，而且重装引擎纯属多余。
   say "▸ 最后一步：重启引擎让插件生效"
   say ""
-  say "  （补丁层这次没打，所以重启不会让补丁生效——那部分要先重装引擎包再跑一次）"
+  say "  （补丁层这次没打，重启只让插件生效；想打补丁就重跑一次本脚本；这个模式没检查引擎状态）"
+elif [ "${APPLY_SKIPPED:-}" = "1" ]; then
+  say "▸ 最后一步：重启引擎让插件生效"
+  say ""
+  say "  （补丁层这次跳过了，重启只让插件生效——那部分要先重装引擎包再跑一次）"
 else
   say "▸ 最后一步：重启引擎让补丁生效"
 fi
@@ -454,7 +523,13 @@ say "  从屏幕最底下往上划一下，调出「最近任务」；"
 say "  把这个 App 的卡片往上划掉，再点图标打开。"
 say ""
 say "  关键是「划掉」——只按返回键退到桌面不算，"
-say "  那样界面收起来了、引擎还在后台跑，补丁不生效。"
+if [ "$MODE" = "repair" ]; then
+  say "  那样 App 还在后台跑，重建的原生界面不会生效。"
+elif [ "$MODE" = "plugin" ] || [ "${APPLY_SKIPPED:-}" = "1" ]; then
+  say "  那样界面收起来了、引擎还在后台跑，插件不会重新装配。"
+else
+  say "  那样界面收起来了、引擎还在后台跑，补丁不生效。"
+fi
 say ""
 say "  没有别的办法：am 这类 Android 命令在 proot 里跑不了，"
 say "  划掉 App 是唯一可靠的重启方式。"
@@ -469,8 +544,7 @@ if [ -n "$BACKUP_DIR" ]; then
   say "  命令行撤销：node patches/purge-patch.mjs restore --backup \"$BACKUP_DIR\""
   say "  或者直接点面板上的「还原补丁」。"
 else
-  say "  这次没有留下备份（没打出补丁，也没有历史备份）。"
+  say "  本次没打补丁，所以没有新备份（历史备份不受影响，还在原地）。"
 fi
 say ""
 
-fi

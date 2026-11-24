@@ -118,13 +118,15 @@ P=$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge) && cd "$P" && git
 
 跑完照例把 App 划掉重开，补丁和插件才生效。
 
-**连不上 GitHub 时**（报 `Failed to connect` / `Could not resolve host`），把 `git pull` 换成归档下载：
+**连不上 GitHub 时**（报 `Failed to connect` / `Could not resolve host`），改用归档更新——它走 `codeload.github.com`，是 GitHub 的下载专用域名，跟主站不是同一条路：
 
 ```sh
-P=$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge) && cd "$P" && node --input-type=module -e "import fs from 'node:fs'; const b = await fetch('https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main').then(r=>r.arrayBuffer()); fs.writeFileSync('/tmp/dsh-purge.tgz', Buffer.from(b))" && tar xzf /tmp/dsh-purge.tgz --strip-components=1 -C . && rm -f /tmp/dsh-purge.tgz && sh install.sh
+sh "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)/patches/lib/update-archive.sh"
 ```
 
-**提醒一句**：归档下载会覆盖工作区文件，仓库里有自己改过的东西（`git status` 不干净）就先 `git stash`，不然会被冲掉。
+这条会把新代码整份换进仓库，**再删掉上游已经删掉的文件**（只覆盖不删除会留下旧模块，和新代码打架）。脚本内部和面板的「更新」按钮用的是同一套替换逻辑，不会出现「按文档做」和「点按钮」结果不一样。
+
+**提醒一句**：它会覆盖工作区文件，仓库里有自己改过的东西（`git status` 不干净）就先 `git stash`，不然会被冲掉。
 
 **面板上点「重读」可以确认当前版本**，版本号就在顶部那句话里；装好之后同一条也可用来查还有没有新版。
 
@@ -136,7 +138,7 @@ P=$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge) && cd "$P" && nod
 node --input-type=module -e "import fs from 'node:fs'; const b = await fetch('https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main').then(r=>r.arrayBuffer()); fs.writeFileSync('/tmp/dsh-purge.tgz', Buffer.from(b))" && mkdir -p dsh-purge-go-main && tar xzf /tmp/dsh-purge.tgz --strip-components=1 -C dsh-purge-go-main && rm -f /tmp/dsh-purge.tgz && cd dsh-purge-go-main && sh install.sh
 ```
 
-效果和上一条一样，只是解开的目录叫 `dsh-purge-go-main` 而不是 `dsh-purge-go`。
+装出来的东西和上一条一样，只有一个差别：**这样解出来的目录没有 `.git`**，所以以后不能用 `git pull` 更新——更新时用 [以后更新](#以后更新) 那节里的「归档更新」命令（它不依赖 `.git`），或者干脆删掉重下一次。
 
 **报 `destination path already exists`**：说明 `~/dsh-purge-go` 已经在了，之前装过。不用删，直接跑这条（跳过下载，只跑安装；脚本是幂等的，装过再跑一遍也不会出问题）：
 
@@ -411,6 +413,7 @@ ls ~/.dsh/dsh-go/plugins/ 2>/dev/null    # 没有 dsh-go-purge 就算干净
 补丁打的是 41 个包，还原取决于你手上还有没有 `apply` 时的备份。
 
 - **有备份**：备份在 `~/.dsh/dsh-purge/patch-backup/<时间戳>/files/`，里面是被改过文件的原始副本。**这个目录只保留最新一份**：每次注入前会先把引擎还原成原始状态、再重建备份，然后清掉旧目录——所以列表里通常只有一条，直接还原它就行，不用挑批次。
+- **老备份缺文件会自动补**：补丁目标会随版本变多（新版本多改几个文件），手里的老备份可能覆盖不全。注入前会先从 npm 把缺的原始文件拉回来补进备份（**所以这一步要联网**，没网就补不上，会提示你「备份不完整」）。不想让它补就加 `--no-topup`。
 
   （手动跑 `node patches/purge-patch.mjs apply` 且没传 `--backup` 时，备份落在仓库根的 `backup-<时间戳>/`。那份**不会**被自动清理，属于你自己的数据，不想要就手动删。）
 
@@ -440,7 +443,7 @@ ls ~/.dsh/dsh-go/plugins/ 2>/dev/null    # 没有 dsh-go-purge 就算干净
 | Node | 20+（用到 `node --check` 和 ESM） |
 | **包管理器** | **pnpm**（`dsh plugin` 底层就是调 pnpm，缺了会报 `dsh: pnpm was not found`） |
 | 运行时依赖 | 零。插件本身只用 Node 内置模块 |
-| 体积 | 64 个文件 / 约 1.17 MB（含截图与文档） |
+| 体积 | 73 个文件 / 约 1.2 MB（含截图与文档；克隆下来的工作区约 2.4 MB，差的那部分是 `.git`） |
 
 **引擎版本适配表**（这张表同时决定「点一键注入」和「点还原」会不会被拦）：
 

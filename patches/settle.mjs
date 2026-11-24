@@ -14,7 +14,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { createRequire } from 'node:module'
 
-const [home, root, wasOnRaw] = process.argv.slice(2)
+const [home, rootArg, wasOnRaw] = process.argv.slice(2)
+// root 要能被下面的兜底改写，所以先解构成 rootArg 再赋给 let。
+let root = rootArg || ''
 const wasOn = wasOnRaw === '1'
 
 /** 日志固定落在这里，卡住了能看出卡在哪一步。 */
@@ -37,9 +39,24 @@ function log(step, detail, extra) {
   }
 }
 
-if (!home || !root) {
-  console.error('usage: node settle.mjs <home> <engineRoot> [wasOn]')
+// root 为空不能直接退出：面板那条路传的是 config?.aiRoot || ''，而引擎里 aiRoot 经常是空的
+// （实测过）。以前这里 exit 2，子进程又被 stdio:ignore + unref，用户完全看不到——
+// 表现就是「更新完了，补丁一条没重打，面板还是旧数字」。
+// 现在改成自己探测：detectRoot() 会按已知路径找引擎包。
+if (!home) {
+  console.error('usage: node settle.mjs <home> [engineRoot] [wasOn]')
   process.exit(2)
+}
+if (!root) {
+  try {
+    const { detectRoot } = await import(path.join(path.dirname(new URL(import.meta.url).pathname), '..', 'patches', 'lib', 'core.mjs'))
+    root = detectRoot()
+    log('root', 'detected', { root })
+  } catch (error) {
+    log('root', 'failed', { error: String(error && error.message) })
+    console.error('拿不到引擎目录，也没传进来，收尾没法做：' + String(error && error.message))
+    process.exit(2)
+  }
 }
 
 // 从引擎侧的安装位置解析插件自己的模块——不能假定 cwd。
@@ -57,67 +74,16 @@ try {
   process.exit(1)
 }
 
-const { patchRevert, patchApply } = mods.ops
-const { syncNative } = mods.sync
-const { setEnabled } = mods.state
-
-const problems = []
 log('start', 'enter', { home, root, wasOn })
 
-// 1. 先关注入：旧正文配新代码容易打架，重打完再按原状态打回去
-try {
-  if (wasOn) setEnabled(home, false)
-  log('inject-off', 'ok')
-} catch (error) {
-  problems.push('关注入失败')
-  log('inject-off', 'failed', { error: String(error && error.message) })
-}
-
-// 2. 还原补丁。失败要留下原因——以前在引擎里被 catch 吞掉，用户只看到「N 条待处理」。
-try {
-  const rv = patchRevert(home, { root })
-  if (rv && rv.ok === false) {
-    problems.push('补丁没还原全')
-    log('revert', 'incomplete', { reason: String(rv.reason || '').slice(0, 120) })
-  } else {
-    log('revert', 'ok', { restored: rv && rv.restored })
-  }
-} catch (error) {
-  problems.push('还原补丁失败')
-  log('revert', 'failed', { error: String(error && error.message) })
-}
-
-// 3. 按新版本的规则重打
-try {
-  const ap = patchApply(home, { root })
-  if (ap && ap.ok === false) {
-    problems.push('补丁没打全')
-    log('apply', 'incomplete', { applied: ap.applied, errors: (ap.errors || []).length })
-  } else {
-    log('apply', 'ok', { applied: ap && ap.applied })
-  }
-} catch (error) {
-  problems.push('重打补丁失败')
-  log('apply', 'failed', { error: String(error && error.message) })
-}
-
-// 4. 同步原生目录——不同步的话插件跑的还是旧代码，面板也是旧样子
-try {
-  const r = syncNative(root)
-  log('sync-native', 'ok', { copied: r && r.copied })
-} catch (error) {
-  problems.push('原生目录没同步')
-  log('sync-native', 'failed', { error: String(error && error.message) })
-}
-
-// 5. 按更新前的状态恢复注入
-try {
-  if (wasOn) setEnabled(home, true)
-  log('inject-on', 'ok')
-} catch (error) {
-  problems.push('恢复注入失败')
-  log('inject-on', 'failed', { error: String(error && error.message) })
-}
+// 六步收尾统一走 lib/settle-steps.mjs —— 和 update-worker 共用同一份，
+// 免得「点按钮能打上、跑 install.sh 打不上」这种分叉再次出现。
+// settle 这条路径不传 prepare：它本身就是「已经更新完、只做收尾」，
+// 补备份在 update-worker 和 purge-patch 里各自做过了。
+const { runSettleSteps } = await import(path.join(path.dirname(new URL(import.meta.url).pathname), 'lib', 'settle-steps.mjs'))
+const { problems } = await runSettleSteps({
+  home, root, wasOn, ops: mods.ops, sync: mods.sync, state: mods.state, log,
+})
 
 log('done', problems.length ? 'with-problems' : 'clean', { problems })
 process.exit(problems.length ? 1 : 0)

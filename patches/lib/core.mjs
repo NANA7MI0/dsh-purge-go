@@ -553,6 +553,7 @@ export function apply(root, opts = {}) {
     return {
       backupDir: null, applied: 0, failed: 0, files: [], logs,
       errors: [{
+        kind: "incomplete_backup",
         error: `备份不完整：它还缺 ${dirtyMissed.length} 个目标文件（如 ${dirtyMissed[0]}），而这些文件现在已经被打过补丁。继续复用会把脏内容存成原始状态。先按 README 第 6 章重装引擎包，再点一键注入。`,
       }],
       rolledBack: false, rollbackFailed: false, rollbackMissed: [],

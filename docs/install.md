@@ -54,7 +54,9 @@ git clone https://github.com/NANA7MI0/dsh-purge-go ~/dsh-purge-go && cd ~/dsh-pu
 | `sh install.sh --plugin-only` | 只装插件，不打补丁。注入层生效，引擎的审批和沙箱限制仍在 |
 | `sh install.sh --dry` | 只扫描 + 预演补丁会改哪些文件，**不装插件、不改引擎、不在仓库里留文件**（probe 结果写临时目录）。和 `--plugin-only` 一起给会直接报错 |
 | `sh install.sh --profile web` | 指定 profile，默认 `web`。也接受等号写法 `--profile=web` |
-| `sh install.sh --repair-native` | **只重建原生界面目录**，补丁和插件都不碰。给「插件目录坏了、App 起不来」的机器用——不卸载、不重装，一条命令修好 |
+| `sh install.sh --repair-native` | **只重建原生界面目录**，不碰补丁层、也不重装插件。会给 `ui.json` 写一条「隐藏旧胶囊」的记录（这是重建过程的一部分）。给「插件目录坏了、App 起不来」的机器用——不卸载、不重装，一条命令修好 |
+| `sh install.sh --force-dirty-backup` | 引擎里还留着上次的补丁时，不再拦着、强行往下走。**一般别用**——存出来的备份会是脏的，还原也撤不掉 |
+| `sh install.sh --no-topup` | 不从 npm 补老备份里缺的文件。排障用：默认会补，补不上才报「备份不完整」 |
 | `sh install.sh -h` / `--help` | 打印用法 |
 
 装到哪个目录都行，用 `~`（也就是 `$HOME`）而不是写死 `/root`——因为**不同环境家目录不一样**：
@@ -153,7 +155,7 @@ git clone https://github.com/NANA7MI0/dsh-purge-go ~/dsh-purge-go && cd ~/dsh-pu
 node --input-type=module -e "import fs from 'node:fs'; const b = await fetch('https://codeload.github.com/NANA7MI0/dsh-purge-go/tar.gz/refs/heads/main').then(r=>r.arrayBuffer()); fs.writeFileSync('/tmp/dsh-purge.tgz', Buffer.from(b))" && mkdir -p dsh-purge-go-main && tar xzf /tmp/dsh-purge.tgz --strip-components=1 -C dsh-purge-go-main && rm -f /tmp/dsh-purge.tgz && cd dsh-purge-go-main && sh install.sh
 ```
 
-效果和上一条一样，只是解开的目录叫 `dsh-purge-go-main` 而不是 `dsh-purge-go`。
+装出来的东西和上一条一样，只有一个差别：**这样解出来的目录没有 `.git`**，所以以后不能用 `git pull` 更新。更新请用 [以后更新](../README.md#以后更新) 里那条「归档更新」命令（它不依赖 `.git`），或者删掉重下一次。
 
 **报 `destination path already exists`**：说明 `~/dsh-purge-go` 已经在了，之前装过。不用删，直接跑这条（跳过下载，只跑安装；脚本是幂等的，装过再跑一遍也不会出问题）：
 

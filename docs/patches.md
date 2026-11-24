@@ -128,3 +128,50 @@ dsh: plugin command failed; diagnostics: ...
 但补丁层的查找串大概率对不上，先跑 `probe` 看命中率。
 
 别的引擎版本也是同理：**先 `probe`，别直接 `apply`**。
+
+## 退出码与 kind
+
+`patches/purge-patch.mjs` 每次跑完，往 **stderr** 打一行机器可读的结果：
+
+```
+__RESULT__ {"ok":false,"command":"apply","applied":0,"errors":1,"kind":"engine_unsupported"}
+```
+
+`install.sh` 只读这一行判断走哪个分支，**不再比对中文提示**。以前靠 `grep '还留着上次打的补丁'`
+这类文案判分支，改一句提示就静默走错，最后落到 else 说「引擎可能已被部分修改」，把人吓去白重装引擎。
+
+**kind 取值：**
+
+| kind | 什么情况 | 引擎状态 |
+|---|---|---|
+| `ok` | 全成功 | 已打上 |
+| `engine_unsupported` | 引擎版本不在 `SUPPORTED_ENGINES` 里 | **一个字节都没动** |
+| `dirty_engine` | 引擎里还留着上次的补丁，不能存成原始状态 | 保持原样（本来就有补丁） |
+| `incomplete_backup` | 找到的备份缺文件 | **一个字节都没动** |
+| `restore_partial` | 还原到一半出错（抛异常或有文件没还原成） | **可能停在半截**，建议重装引擎包 |
+| `rollback_incomplete` | 打到一半失败、回滚也没滚干净 | **可能停在半截** |
+| `apply_errors` | 一般的打补丁失败 | 看日志 |
+| `apply_failed` | `core.apply` 直接抛异常 | 不确定 |
+| `restore_empty` | 还原执行了但没还原任何文件 | 没变 |
+| `no_root` | 找不到引擎目录 | 没动 |
+| `unknown_command` | 子命令拼错 | 没动 |
+
+**新增 kind 时两处都要改**：`patches/purge-patch.mjs` 里 emit 的地方，和 `install.sh` 里对应的分支。
+
+## 补备份为什么必须在还原之前
+
+补丁目标会长大（0.7.0 加了 presets、ptc、pipeline.js）。备份是打补丁那一刻建的，
+只包含当时的目标。老备份还原时「47 个目标只覆盖 41 个」，剩下 6 个永远带着补丁标记。
+
+`prepareBackup`（`lib/prepare.js`）会从 npm 把缺的原始文件拉回来补进备份。它必须排在最前：
+
+```
+补备份 → 找可复用的备份 → 校验完整性 → 还原 → 重打
+```
+
+**面板那条路（`patches/update-worker.mjs`）一直有这一步，CLI 之前没有** —— 于是
+用户照 README 跑 `git pull && sh install.sh` 时补丁一条都打不上、只把插件装好；
+点面板的「更新」按钮却是好的。两边现在都做，`--no-topup` 可以关掉（排障用）。
+
+**选哪份备份也是共用的**：`prepareBackup` 和 `findReusableBackup` 用同一个判断，
+否则「补的是最新那份、用的是最早那份」，补了个寂寞。
