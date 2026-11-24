@@ -215,9 +215,12 @@ console.log('\n【8】跨文件锚点（docs 之间、docs 指 README）')
   // 原来的第 7 组只查 README 内部，跨文件这类一直没查，实测漏了 8 处。
   const docsDir = path.join(ROOT, 'docs')
   const all = ['README.md', ...fs.readdirSync(docsDir).filter((f) => f.endsWith('.md')).map((f) => 'docs/' + f)]
-  // GitHub 的锚点规则：小写 → 去掉除字母数字/中文/空格/连字符/下划线外的字符 → 空格变连字符
+  // GitHub 的锚点规则：小写 → 去掉除字母数字/中文/空格/连字符/下划线外的字符 → 每个空格各变一个连字符
+  // 注意必须是 /\s/g 不能是 /\s+/g：标题「有备份 / 备份没了」去掉斜杠后是两个连续空格，
+  // GitHub 会生成「有备份--备份没了」（双连字符）。用 \s+ 合并成一个连字符，检查器就会
+  // 认可单连字符、而用户点了跳不过去——那样检查器就成了「把错的判成对的」。
   const ghSlug = (s) =>
-    s.trim().toLowerCase().replace(/[^\w\u4e00-\u9fa5 \-]/g, '').replace(/\s+/g, '-')
+    s.trim().toLowerCase().replace(/[^\w\u4e00-\u9fa5 \-]/g, '').replace(/\s/g, '-')
   const table = {}
   for (const f of all) {
     const set = new Set()

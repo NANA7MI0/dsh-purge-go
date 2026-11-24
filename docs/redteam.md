@@ -57,7 +57,7 @@ VPS 地址（技能里还是 `<你的VPS_IP>` 占位符）、`toolkit/` 下的 `
 
 ## 5. 已知的两个上游 bug（本仓库的装法里已修）
 
-`lib/tools.js` 里两处调用没传 `scope`，导致引擎的 `collect(options)` 只扫 global 层、
+红队包自己的 `lib/tools.js` 里两处调用没传 `scope`，导致引擎的 `collect(options)` 只扫 global 层、
 收集不到注册在预设 fiber 层的技能 provider。
 
 症状对照：修复前 `total: 0`；只修 `list` 后 `total: 46` 但 46 条全是 `unknown`；
