@@ -181,5 +181,34 @@ console.log('\n【7】README 内部锚点')
   pass('README 锚点对照完成（' + heads.length + ' 个标题）')
 }
 
+console.log('\n【8】跨文件锚点（docs 之间、docs 指 README）')
+{
+  // 为什么单列这一组：README 的章节重新编号过好几次（15 章压成 9 章），
+  // docs/ 里那些../README.md#2-安装 之类的链接跟不上，全都指到空处。
+  // 原来的第 7 组只查 README 内部，跨文件这类一直没查，实测漏了 8 处。
+  const docsDir = path.join(ROOT, 'docs')
+  const all = ['README.md', ...fs.readdirSync(docsDir).filter((f) => f.endsWith('.md')).map((f) => 'docs/' + f)]
+  // GitHub 的锚点规则：小写 → 去掉除字母数字/中文/空格/连字符/下划线外的字符 → 空格变连字符
+  const ghSlug = (s) =>
+    s.trim().toLowerCase().replace(/[^\w\u4e00-\u9fa5 \-]/g, '').replace(/\s+/g, '-')
+  const table = {}
+  for (const f of all) {
+    const set = new Set()
+    for (const m of read(f).matchAll(/^#{1,6} (.+)$/gm)) set.add(ghSlug(m[1]))
+    table[f] = set
+  }
+  let bad8 = 0
+  for (const f of all) {
+    for (const m of read(f).matchAll(/\]\(([^)\s#]*\.md)?#([^)\s]+)\)/g)) {
+      const target = m[1] ? path.normalize(path.join(path.dirname(f), m[1])) : f
+      const want = decodeURIComponent(m[2]).toLowerCase()
+      const set = table[target]
+      if (!set) { fail(f + ' 里的链接指向不存在的文件 ' + target); bad8++; continue }
+      if (!set.has(want)) { fail(f + ' 里的锚点 ' + target + '#' + m[2] + ' 找不到对应标题'); bad8++ }
+    }
+  }
+  if (bad8 === 0) pass('跨文件锚点全部有效（' + all.length + ' 份文档）')
+}
+
 console.log('\n' + (bad === 0 ? '一致：' + ok + ' 组检查通过' : '不一致：' + bad + ' 处，通过 ' + ok + ' 组'))
 process.exitCode = bad === 0 ? 0 : 1

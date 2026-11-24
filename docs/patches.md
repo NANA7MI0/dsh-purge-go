@@ -74,7 +74,7 @@ configured answerers; without an available answerer, the request fails closed.
 
 | id | 名字 | 改的是什么 | 手机上实际影响 |
 |---|---|---|---|
-| 5 / 8 / 9 / 10 / 11 | `APPROVAL_NEVER_SENTENCE` / `APPROVAL_POLICY_DEFAULT` / `APPROVAL_AUTO_GRANT` / `APPROVAL_CONFIG_DEFAULT_NEVER` / `APPROVAL_NEVER_SENTENCE_BYPASS` | 审批策略默认值 `ask` → `never`，两处提示文案改成 `auto-granted` | **生效**：需要审批的操作改为直接执行（原因见 [它是什么](../README.md#1-它是什么)） |
+| 5 / 8 / 9 / 10 / 11 | `APPROVAL_NEVER_SENTENCE` / `APPROVAL_POLICY_DEFAULT` / `APPROVAL_AUTO_GRANT` / `APPROVAL_CONFIG_DEFAULT_NEVER` / `APPROVAL_NEVER_SENTENCE_BYPASS` | 审批策略默认值 `ask` → `never`，两处提示文案改成 `auto-granted` | **生效**：需要审批的操作改为直接执行（原因见 [它是什么](../README.md#2-它是什么)） |
 | 6 | `SANDBOX_DENY_FILE_WRITE` | SBPL 规则 `(deny file-write*)` → `(allow file-write*)` | 规则不执行；只改模型看到的那句话 |
 | 7 | `SANDBOX_MODE_DEFAULT` | 沙箱 mode 默认值 `workspace-write` → `danger-full-access` | 同上，Android 上没有可用的沙箱后端 |
 | 15 | `SANDBOX_CONFINE_PASSTHROUGH` | `confine(argv, policy)` 直接返回 | 同上，手机上这个函数没有调用点 |

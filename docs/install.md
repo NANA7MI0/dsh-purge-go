@@ -227,7 +227,7 @@ done
 rm -rf "$N" && mv "$NEW" "$N"   # 全建好再整体替换，中途失败不会留下残缺目录
 ```
 
-**只有手机端要这一步。** 那一层不在 profile 里，是 app 自己去 `~/.dsh/dsh-go/plugins/` 扫出来画胶囊和面板的，`dsh plugin add` 管不到。**复制一份完整副本**进去——不是软链，理由见 [README 的安装一章](../README.md#2-安装)。
+**只有手机端要这一步。** 那一层不在 profile 里，是 app 自己去 `~/.dsh/dsh-go/plugins/` 扫出来画胶囊和面板的，`dsh plugin add` 管不到。**复制一份完整副本**进去——不是软链，理由见 [README 的安装一章](../README.md#1-安装)。
 
 ## 装插件
 
