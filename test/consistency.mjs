@@ -64,7 +64,7 @@ console.log('\n【2】面板描述（三块 + 四个按钮）')
   fs.rmSync(home, { recursive: true, force: true })
 }
 
-console.log('\n【3】补丁数字（58 / 86 / 26 / 41 包 / 47 文件）')
+console.log('\n【3】补丁数字（实测对照，不写死）')
 if (!hasEngine) { console.log('    跳过：没有引擎包') } else {
   const rows = probe(ENGINE)
   const t = tally(rows)

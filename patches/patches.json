@@ -2635,5 +2635,25 @@
     "markers": [
       "[dsh-purge] cookie-name-ignore-port"
     ]
+  },
+  {
+    "id": 94,
+    "name": "SCRUB_HISTORY",
+    "layer": "代码",
+    "layer_en": "Code",
+    "desc": "历史清洗：请求视图里的旧拒绝回复作废（不落盘）/ void stale refusals in the request view",
+    "file": [
+      "session"
+    ],
+    "optional": true,
+    "markers": [
+      "[dsh-purge] history scrub hook"
+    ],
+    "replacements": [
+      {
+        "pattern": "\t\tthis.derivedNodes = nodes.length;\n\t\treturn [...this.derived];",
+        "replace": "\t\tthis.derivedNodes = nodes.length;\n\t\tconst __purgeScrubBase = [...this.derived];\n\t\ttry { const __purgeScrub = globalThis.__dshPurgeScrub; if (typeof __purgeScrub === \"function\") { const __r = __purgeScrub(__purgeScrubBase); if (Array.isArray(__r)) return __r; } } catch { /* [dsh-purge] history scrub hook */ }\n\t\treturn __purgeScrubBase;"
+      }
+    ]
   }
 ]

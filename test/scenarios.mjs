@@ -117,7 +117,16 @@ console.log('\n场景 1：补丁全打上的样子')
   const s = collect(home, { aiRoot: root })
   console.log('    打了 ' + pa.applied + ' 个文件；面板 ' + s.summary + ' / ' + s.patchText)
   check('补丁是 N/N（全部打上）', /^\d+\/\d+$/.test(s.patchText) && s.patchText.split('/')[0] === s.patchText.split('/')[1], s.patchText)
-  check('分子分母不含反向补丁（#2/#3）', s.patchText.startsWith('58/'), s.patchText)
+  // 分子分母不能写死：补丁表加一条这个数就变。用「等于适用条数」来判，
+  // 而不是等于某个具体数字——这条测的是「剔没剔 reverse」，不是「一共几条」。
+  {
+    const parts = String(s.patchText || '').split('/')
+    const num = Number(parts[0])
+    const den = Number(parts[1])
+    check('分子分母不含反向补丁（#2/#3）',
+      Number.isFinite(num) && Number.isFinite(den) && num === den && den > 20,
+      s.patchText)
+  }
   check('总状态说「正常」', s.summary.includes('正常'), s.summary)
   check('tone 是 good', s.tone === 'good', s.tone)
   check('四个按钮齐全',

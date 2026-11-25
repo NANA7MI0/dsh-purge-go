@@ -16,7 +16,7 @@ node patches/purge-patch.mjs restore --backup <备份目录>
 
 `--root` 或环境变量 `DSH_AI_ROOT` 可指定引擎包目录，默认自动探测。补丁会改 41 个引擎包、**必须重启引擎才生效**。
 
-## 86 条补丁的命中情况
+## 87 条补丁的命中情况
 
 > 下表是 **dsh-go 0.2.2-rc.1 + dsh-purge-go、已 apply 过**的本机读数。你的机器可能不同，以 `probe` 为准。状态词的准确定义在 [状态含义](states.md)。
 
@@ -26,7 +26,7 @@ node patches/purge-patch.mjs restore --backup <备份目录>
 | `no_pkg` | 26 | 目标包手机上根本没有（见下） |
 | `partial` | 0 | 本机没有。某条只命中了多套写法里的一套时才会出现，含义见 [状态含义](states.md) |
 
-**86 条里，手机上有目标的有 58 条是真的会改动文件，全部生效。** 面板上写着 `58/58`，分子分母相等。
+**87 条里，手机上有目标的有 59 条是真的会改动文件，全部生效。** 面板上写着 `59/59`，分子分母相等。
 
 `partial` 算不算生效要分情况看——它字面意思是「改了一部分」，**大多数时候是没改全**，不能一概当正常（详见 [状态含义](states.md)）。本机当前没有 `partial`，所以这里不存在歧义。
 
@@ -44,7 +44,7 @@ node patches/purge-patch.mjs restore --backup <备份目录>
 
 **有些包在桌面版和手机版叫法不同**（`user-approval-invariant` → `dsh-user-approval` 等），这批没丢：`patches.json` 里这些补丁的 `file` 字段并列写了两个名字，执行器 `candidatesFor()` 挨个试，哪个存在用哪个。所以 #5 这类显示的是 `applied` 而不是 `no_pkg`。
 
-**一句话总结**：86 条里 58 条在手机上真能改，破甲靠的就是这批。
+**一句话总结**：87 条里 59 条在手机上真能改，破甲靠的就是这批。
 
 ## 为什么手机上必须改审批（引擎原文）
 
@@ -66,9 +66,9 @@ configured answerers; without an available answerer, the request fails closed.
 
 ## 关键补丁
 
-86 条覆盖提示词、代码、工具、兼容四类。
+87 条覆盖提示词、代码、工具、兼容四类。
 
-**下面这张表里的名字是 `patches.json` 里的原始命名，照录以便逐条核对。**名字描述的是每条补丁改的配置项，不是本文档对使用者的建议——完整 86 条见 `patches/patches.json`。最要紧的几条：
+**下面这张表里的名字是 `patches.json` 里的原始命名，照录以便逐条核对。**名字描述的是每条补丁改的配置项，不是本文档对使用者的建议——完整 87 条见 `patches/patches.json`。最要紧的几条：
 
 **先说一句结论，再看表：手机上真正会执行到的，只有审批那一组。沙箱那几条改的是 macOS 的规则语法（SBPL），Android proot 里根本没有执行后端——它们在手机上等于没生效，只是把给模型看的那句话从 read-only 改成了允许。详见 [沙箱：手机上和桌面上不是一回事](../README.md#沙箱手机上和桌面上不是一回事)。**
 
@@ -85,7 +85,7 @@ configured answerers; without an available answerer, the request fails closed.
 
 ## 补丁编号
 
-86 条，历史编号最大到 93，中间空了 7 个（#20 #21 #27 #41 #44 #79 #81，已删除或合并）。
+87 条，历史编号最大到 94，中间空了 7 个（#20 #21 #27 #41 #44 #79 #81，已删除或合并）。
 
 ## 引擎版本适配表
 
