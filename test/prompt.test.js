@@ -74,7 +74,8 @@ test('resolveInject：优先级 byModel > 变体 > prompt-inject.md > 内置', (
   assert.equal(resolveInject(home, { state: readState(home) }).text, 'VARIANT BODY')
 
   // byModel 优先于当前变体
-  setModelVariant(home, 'vendor_model_free', 'perModel')
+  // 键用原始模型名：state 里存的是 model 原样，不按文件名清洗（清洗会把中文压成 default）
+  setModelVariant(home, 'vendor/model:free', 'perModel')
   writeVariant(home, 'perModel', 'PER MODEL BODY')
   const resolved = resolveInject(home, { state: readState(home), model: 'vendor/model:free' })
   assert.equal(resolved.text, 'PER MODEL BODY')

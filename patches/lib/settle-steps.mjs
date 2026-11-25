@@ -1,3 +1,6 @@
+import fs from 'node:fs'
+import path from 'node:path'
+
 // 更新收尾的六步 —— 只此一处实现。
 //
 // 为什么抽出来：这套步骤原本在 settle.mjs 和 update-worker.mjs 里各写了一遍，
@@ -22,6 +25,21 @@ export async function runSettleSteps(ctx) {
   const { setEnabled } = state
   const problems = []
 
+  // 0. 先把「更新前注入是开是关」写进 marker。
+  // 手机上后台进程被 SIGKILL 是常态（SIGKILL 连 finally 都不执行），
+  // 只靠 finally 恢复不住：被杀在第 1 步和第 6 步之间，state.json 就永久停在 enabled:false，
+  // 用户更新完发现破甲没工作，而状态文件看起来像是他自己关的。
+  // 插件启动时读这个 marker 补一次恢复（见 lib/index.js 的 resumePendingRestore）。
+  try {
+    fs.mkdirSync(path.join(home, 'dsh-purge'), { recursive: true })
+    fs.writeFileSync(
+      path.join(home, 'dsh-purge', 'pending-restore.json'),
+      JSON.stringify({ wasOn, at: new Date().toISOString(), step: 'inject-off' }),
+    )
+  } catch (error) {
+    log('marker', 'failed', { error: String(error && error.message) })
+  }
+
   // 1. 先关注入：旧正文配新代码容易打架，重打完再按原状态打回去
   try {
     if (wasOn) setEnabled(home, false)
@@ -31,6 +49,11 @@ export async function runSettleSteps(ctx) {
     log('inject-off', 'failed', { error: String(error && error.message) })
   }
 
+  // 2~5 步全包在 try 里，第 6 步放 finally：
+  // 手机上后台进程被 SIGTERM/SIGKILL 是常态（replace-repo.sh 的设计原因就是它）。
+  // 以前被杀在第 1 步和第 6 步之间，注入就一直是关的——用户更新完发现破甲没工作，
+  // 而状态文件里明明写着 enabled:false，看起来像是他自己关的。
+  try {
   // 2. 补齐备份（只在给了 prepare 时做）
   // 补丁目标会长大，老备份覆盖不全，不补就会「47 个目标只还原 41 个」，
   // 剩下几个永远带着补丁标记。
@@ -75,12 +98,29 @@ export async function runSettleSteps(ctx) {
   // 5. 同步原生目录——不同步的话插件跑的还是旧代码，面板也是旧样子
   try {
     const r = syncNative(root)
-    log('sync-native', 'ok', { copied: r && r.copied })
+    // syncNative 失败时不抛，而是返回 { ok:false, skipped }。以前这里不看 ok、
+    // 直接记 ok，于是「11 项全部跳过、copied:0」也被当成成功——用户更新完重启，
+    // 胶囊和面板还是旧代码，日志里却看不到任何异常。
+    if (!r || r.ok !== true) {
+      const why = (r && (r.error || (r.skipped || []).join(','))) || '未知'
+      problems.push('原生目录没同步：' + String(why).slice(0, 60))
+      log('sync-native', 'failed', { copied: r && r.copied, why: String(why).slice(0, 120) })
+    } else {
+      log('sync-native', 'ok', { copied: r.copied })
+    }
   } catch (error) {
     problems.push('原生目录没同步')
     log('sync-native', 'failed', { error: String(error && error.message) })
   }
 
+  } finally {
+    // 收尾走完就把 marker 删掉。
+    //
+    // 不删的话，它会在磁盘上留到「用户下次启动插件」——那时 resumePendingRestore
+    // 会按 marker 里的 wasOn 把注入状态覆盖一遍，而用户在更新完之后可能已经
+    // 手动关过注入，于是关掉的注入又被重新打开。
+    // 只有「收尾没跑完」（SIGKILL、断电）时才应该留着让下次补。
+    try { fs.rmSync(path.join(home, 'dsh-purge', 'pending-restore.json'), { force: true }) } catch { /* 删不掉下次补也无害 */ }
   // 6. 按更新前的状态恢复注入
   try {
     if (wasOn) setEnabled(home, true)
@@ -90,5 +130,6 @@ export async function runSettleSteps(ctx) {
     log('inject-on', 'failed', { error: String(error && error.message) })
   }
 
+  }
   return { problems }
 }

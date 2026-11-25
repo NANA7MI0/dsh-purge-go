@@ -49,7 +49,8 @@ docs/             截图 3 张（panel-status.jpg 面板 · app-all-features.jpg
 lib/              注入层与原生界面：25 个 .js 模块 + 2 个数据文件（早期部分模块来自 LanJinGod，其余是本仓库加的）
   asset-table.json  正文密文（原始 md 不进仓库，解出来的办法见 docs/tools.md）
   backup-files.js   备份缺哪些文件（prepare 与 topup 共用这一份，别再造第二份）
-assets/           categories.json（题材分类出厂值；明文不进 git，发布包里只有 lib/categories-table.json）
+assets/           只在本机开发时存在（categories.json、default-prompt.md 明文源，都不进 git）。
+                  全新 clone / npm 包里没有这个目录；运行时装的是 lib/ 下的两份密文产物。
 patches/          patches.json（86 条）
   purge-patch.mjs   CLI 壳（只做参数解析与输出；每次结束打一行 __RESULT__ {json} 给 install.sh 判断分支）
   lib/core.mjs      纯函数库（probe / apply / restore / isDone / verifyFile）

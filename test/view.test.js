@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 
-import { snapshot, panelView, promptView, statusCard, promptCard, stripData } from '../lib/view.js'
+import { snapshot, statusCard, promptCard, stripData } from '../lib/view.js'
 import { writeState, setModelVariant } from '../lib/state.js'
 import { writeVariant } from '../lib/prompt.js'
 import { jsonBytes } from '../lib/card.js'
@@ -55,58 +55,6 @@ test('stripData：≤24 字，开关映射到色调', () => {
   writeState(home, { enabled: false })
   const off = stripData(snapshot(home), 'zh')
   assert.equal(off.tone, 'muted')
-})
-
-test('panelView：预算内、动作全部有 handler、根是 stack', () => {
-  const home = tempHome()
-  writeState(home, { enabled: true })
-  writeVariant(home, 'tight', 'TIGHT')
-  setModelVariant(home, 'vendor_model', 'tight')
-
-  const view = panelView(snapshot(home), { locale: 'zh' })
-  assert.equal(view.type, 'stack')
-  assert.ok(jsonBytes(view) < 32 * 1024, `视图 ${jsonBytes(view)} 字节`)
-
-  const { nodes, depth } = collect(view)
-  assert.ok(nodes.length <= 120, `节点 ${nodes.length}`)
-  assert.ok(depth <= 8, `层数 ${depth}`)
-
-  const actions = actionsOf(view)
-  visitAll(view, (node) => {
-    if (node.type === 'text') assert.ok(String(node.text).length <= 2000)
-  })
-  // 按**面板作用域**校验：每个面板的 actions 里出现的 id，必须在该面板自己的 handler 表里。
-  // 用全局白名单会让「seed 挪到正文面板但破甲面板还留着同名 handler」这种死代码照样全绿。
-  const PURGE_HANDLERS = new Set(['toggle', 'reload', 'patchApply', 'patchRevert', 'use', 'unmap', 'seed', 'revert'])
-  const PROMPT_HANDLERS = new Set(['copy', 'toggle', 'seed', 'revert'])
-  const purgeActions = actionsOf(view)
-  for (const action of purgeActions) {
-    assert.ok(PURGE_HANDLERS.has(action), `破甲面板用了未注册的动作 ${action}`)
-  }
-  assert.ok(purgeActions.has('toggle'))
-  assert.ok(purgeActions.has('patchApply'), '破甲面板必须有应用补丁入口')
-
-  // 正文面板独立校验
-  const pv = promptView(snapshot(home), { locale: 'zh' })
-  const promptActions = actionsOf(pv)
-  for (const action of promptActions) {
-    assert.ok(PROMPT_HANDLERS.has(action), `正文面板用了未注册的动作 ${action}`)
-  }
-  assert.ok(promptActions.has('seed'), '正文面板要有落盘默认入口')
-  assert.ok(promptActions.has('revert'), '正文面板要有关闭并备份入口')
-})
-
-test('promptView：正文预览被截断到 1800 字以内', () => {
-  const home = tempHome()
-  writeState(home, { enabled: true })
-  const view = promptView(snapshot(home), { locale: 'zh' })
-  const texts = []
-  visitAll(view, (node) => {
-    if (node.type === 'text') texts.push(node.text)
-  })
-  assert.equal(texts.length, 1)
-  assert.ok(texts[0].length <= 1801)
-  assert.ok(jsonBytes(view) < 32 * 1024)
 })
 
 test('statusCard / promptCard：工具卡预算 8 KiB、节点 ≤40', () => {

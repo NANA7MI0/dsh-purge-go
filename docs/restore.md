@@ -15,7 +15,7 @@
 - 仓库根目录的 `backup-<时间戳>/`（手动跑 `node patches/purge-patch.mjs apply` 且没传 `--backup` 时才会建）→ **不会被清理**，会一直累积。那是用户自己的数据，脚本不去动它；不想要就手动删。
 
 ```sh
-cd "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)"
+cd "$(readlink -f "${DSH_HOME:-$HOME/.dsh}"/profiles/web/node_modules/dsh-go-purge)"
 ls ~/.dsh/dsh-purge/patch-backup/          # 通常只有一条
 node patches/purge-patch.mjs restore --backup ~/.dsh/dsh-purge/patch-backup/<那一条>
 ```

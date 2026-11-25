@@ -15,11 +15,12 @@
  * 且用 process.exit 结束进程，无法被库调用。
  */
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import * as core from "./lib/core.mjs";
 // 面板和 CLI 必须走同一套「先还原再重打」的逻辑，否则两条路行为分叉：
 // 用户点按钮是一个结果，跑 install.sh 是另一个结果，出问题永远查不清。
-import { findReusableBackup, pruneOtherBackups, hasPatchTraces, missingBackupFiles } from "../lib/ops.js";
+import { findReusableBackup, pruneOtherBackups, hasPatchTraces, enginePatched, missingBackupFiles } from "../lib/ops.js";
 import { dshHome } from "../lib/home.js";
 // 补备份要用它：面板路径（update-worker）和 CLI 必须做同样的事，否则两条路行为分叉。
 import { prepareBackup } from "../lib/prepare.js";
@@ -78,9 +79,9 @@ if (cmd === "probe") {
   const NL = String.fromCharCode(10);
   const NOTE = {
     partial:
-      "  正常情况，不用担心，不影响破甲能力。" + NL +
-      "  补丁表里每条都写了几套不同引擎版本的写法，你的引擎只会有其中一套；" + NL +
-      "  命中那套就已经改好了，剩下的是别的版本和桌面版的备用分支。",
+      "  要具体看，不能一概当正常。" + NL +
+      "  partial 的意思是「这条补丁还有几处没改到位」，不是「已经生效」。" + NL +
+      "  看下面每条括号里的 (没改到/总数)：小说明大部分改好了，接近总数说明基本没打上。",
     miss:
       "  一条都对不上：引擎里这段代码已经改了样子，或这条只管桌面端。" + NL +
       "  不影响手机端的破甲能力。",
@@ -98,13 +99,17 @@ if (cmd === "probe") {
     // applied 通常是几十条，逐条列只会刷屏——只报数量。
     if (st === "applied") continue;
     for (const r of g) {
-      const extra = st === "partial" && r.total ? "  (" + (r.total - r.hits) + "/" + r.total + " 套写法命中)" : "";
+      // 和工具卡用同一句话：hits 是「还剩几处没改到位」
+      const extra = st === "partial" && r.total ? "  (还剩 " + r.hits + " 处没改到位，共 " + r.total + " 处写法)" : "";
       console.log("  " + r.id + "." + r.name + (r.pkg ? "  [" + r.pkg + "]" : "") + extra);
     }
   }
   // 写哪儿由 --out 决定；没写就写 cwd（老行为）。install.sh --dry 会传临时目录，
   // 否则号称「什么都没改」却往仓库里丢一个 patch-probe.json。
-  const out = flag("out") || path.join(process.cwd(), "patch-probe.json");
+  // 默认写系统临时目录，不写当前目录：工具的 runPatchScript 把 cwd 设成插件包目录，
+  // 于是「probe 只看当前分布、不改文件」的 probe 会往插件包里扔一个 16 KB 的
+  // patch-probe.json。--dry 也走这里，而 --dry 承诺「不在仓库里留文件」。
+  const out = flag("out") || path.join(os.tmpdir(), "dsh-purge-probe-" + process.pid + ".json");
   fs.mkdirSync(path.dirname(out), { recursive: true });
   fs.writeFileSync(out, JSON.stringify(rows, null, 1));
 
@@ -204,12 +209,19 @@ if (cmd === "probe") {
   //
   // 不能加「没传 --backup 才拦」这种条件：install.sh 每次都传 --backup，那样等于永远不拦。
   // 脏引擎配上任何目标目录，存出来的都是脏快照，跟路径无关。真要强行继续，用 --force-dirty-backup。
-  if (!has("dry") && !has("force-dirty-backup")) {
+  if (!has("force-dirty-backup")) {
     try {
-      if (hasPatchTraces(root)) {
+      // 判据用 probe，不用 [dsh-purge] 哨兵串：27/86 条补丁不留标记，靠串会漏判
+      if (enginePatched(root).ids.length > 0) {
+        // --dry 也要拦并报同样的分类：docs 里写着「--dry 预演的正是真装会改的同一批文件」，
+        // 以前 dry 绕过这层检查，预演打「预演完成」，真装却因为脏引擎直接跳过补丁层——
+        // 用户按预演结果决定要不要装，装完发现结果不一样。
         fail("引擎里还留着上次打的补丁，现在建备份会把「已打补丁」的状态存成原始状态，之后还原也撤不掉。先重装引擎包（见 README 第 6 章）；确认要强行继续就加 --force-dirty-backup。", "dirty_engine");
       }
-    } catch { /* 探测失败就不拦，别把安装卡死 */ }
+    } catch (error) {
+      // fail() 自己会 process.exit，走不到这里；这里是 probe 本身抛错时的兜底
+      if (String(error?.message || '').includes('引擎里还留着')) throw error
+    }
   }
 
   let report;
@@ -291,7 +303,10 @@ if (cmd === "probe") {
     // restored=0 但没报错：备份是空的/什么都不用还原。调用方要和「还原成功」分开看。
     kind: rerrs.length ? "restore_partial" : Number(report.restored) > 0 ? "ok" : "restore_empty",
   });
-  if (rerrs.length) process.exitCode = 1;
+  // ok=false 的时候退出码必须非 0。以前只看 rerrs：空备份（restored=0、无错误）会 emit
+  // 一个 ok:false，然后 exit 0——工具侧按退出码判成功，于是「补丁已还原」报得理直气壮，
+  // 实际一个字节都没动。
+  if (rerrs.length || !(Number(report.restored) > 0)) process.exitCode = 1;
 } else {
   fail("unknown command: " + cmd + " (probe | apply | restore)", "unknown_command");
 }

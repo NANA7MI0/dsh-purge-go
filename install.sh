@@ -60,7 +60,8 @@ say() { printf '%s\n' "$*"; }
 # 把人吓去白重装一次引擎。这些字符串分散在 core.mjs 与 purge-patch.mjs 两个文件里，
 # 改的人根本想不起另一处。
 #
-# 纯 sed 实现、不启 node：只取一行 JSON 里的简单字段，够用且快。
+# 用 node 解析 JSON：以前是纯 sed，但正则 [^,}]* 遇到值里带逗号（错误消息）就会截断。
+# 现在只读 kind/applied 这类原子值，碰不上，但契约上是脆的——换成真解析把这条路封掉。
 # 用法：result_field "$OUT" kind
 result_field() {
   # 用 node 解析 JSON，不用 sed 抠字段：sed 那版的正则是 [^,}]*，值里一旦带逗号
@@ -146,7 +147,14 @@ else
     if [ "$DRY" = "1" ]; then
       # 不能 node ... | sed 然后无条件报成功：if 看的是 sed 的退出码，恒 0，
       # 补丁预演炸了也照样印「预演完成」。先收输出、按 node 自己的退出码判。
-      if DRY_OUT=$(node patches/purge-patch.mjs apply --dry 2>&1); then
+      # --out 指到临时文件：probe 默认写 <cwd>/patch-probe.json，而 --dry 承诺「什么都没改」，
+      # 往仓库里扔一个 16 KB 的文件会让这句承诺变成假话
+      DRY_TMP="/tmp/dsh-purge-dry-$$.json"
+      # 退出前删掉临时文件：--dry 承诺「什么都没改」，留个 16 KB 的 json 在 /tmp
+      # 虽然不影响仓库，但反复调试会攒一堆。trap 保底，正常路径也删。
+      trap 'rm -f "$DRY_TMP" 2>/dev/null || true' EXIT INT TERM
+      if DRY_OUT=$(node patches/purge-patch.mjs apply --dry --out "$DRY_TMP" 2>&1); then
+        rm -f "$DRY_TMP" 2>/dev/null || true
         printf '%s\n' "$DRY_OUT" | grep -v '^__RESULT__ ' | sed 's/^/  /'
         say ""
         say "  ✔ 预演完成，什么都没改。"
@@ -160,6 +168,9 @@ else
         if [ "$(result_field "$DRY_OUT" kind)" = "engine_unsupported" ]; then
           die "引擎版本本插件还没适配，所以预演也打不了。这不是故障——等插件发新版适配即可。"
         fi
+        if [ "$(result_field "$DRY_OUT" kind)" = "dirty_engine" ]; then
+          die "引擎里还留着上次打的补丁。这个状态下真装会跳过补丁层（不是预演失败）——先重装引擎包，再跑一次。"
+        fi
         die "预演本身失败了（上面的输出里有原因）。这不是「什么都没改」，是没能判断该改什么。"
       fi
     fi
@@ -172,7 +183,9 @@ else
     # 混用本地时间会让目录名排序错乱——本地比 UTC 快 8 小时，
     # 「19:45 本地」会排到「12:38 UTC」后面，而后者其实更新。
     BACKUP_DIR="$DSH_ROOT/dsh-purge/patch-backup/$(date -u +%Y%m%d%H%M%S)-$$"
-    mkdir -p "$BACKUP_DIR"
+    # 加 || die：set -e 下不可写时脚本会无声退出（一句提示都没有），
+    # 用户只看到「什么都没发生」。写不了备份就该明确说，因为没备份就没法还原。
+    mkdir -p "$BACKUP_DIR" || die "建不了备份目录 $BACKUP_DIR（磁盘满或没有写权限）。补丁层没打，先解决这个再重跑。"
     # 不能写成 `if node ... | sed`：if 看的是管道最后一个命令（sed）的退出码，
     # sed 恒返回 0，于是补丁全失败也照样打印「✔ 补丁已打上」并以 0 退出。
     # 先把输出收进变量、按 node 自己的退出码判断，再决定要不要打印。
@@ -335,7 +348,10 @@ if [ -f /etc/dsh-app/runtime.json ]; then
   mkdir -p "$NEW" || die "建不了临时目录：$NEW"
   LINKED=0
   FAILED=""
-  for f in LICENSE NOTICE README.md CHANGELOG.md assets cordis.patch.yml docs install.sh lib patches package.json; do
+  # 清单里不放 assets：那份明文只在本机开发时用（改分类要从它 embed 出密文），
+  # 运行时读的是 lib/categories-table.json，明文不进 git 也不进 npm 包。
+  # 以前把它列成必需项，全新 clone 和 npm 包里都没有它，第 2 步会直接 die。
+  for f in LICENSE NOTICE README.md CHANGELOG.md cordis.patch.yml docs install.sh lib patches package.json; do
     if [ ! -e "$HERE/$f" ]; then
       FAILED="$FAILED $f(源里没有)"
       continue
@@ -394,7 +410,11 @@ if [ -f /etc/dsh-app/runtime.json ]; then
     const fs = require("fs"), p = process.argv[1]
     let j = { version: 1 }
     try {
-      j = JSON.parse(fs.readFileSync(p, "utf8"))
+      const parsed = JSON.parse(fs.readFileSync(p, "utf8"))
+      // 合法 JSON 也可能是 null / 数组 / 字符串——直接当对象用会抛 TypeError，
+      // 而外层 || UI_RESULT=skip 会把它说成「已经隐藏过了」，用户看到的是「跳过」，
+      // 实际什么都没写成。
+      j = (parsed && typeof parsed === "object" && !Array.isArray(parsed)) ? parsed : { version: 1 }
     } catch (error) {
       // 文件存在但解析不了：先留一份原文再重建，别把用户别的配置弄丢
       try {
@@ -409,10 +429,12 @@ if [ -f /etc/dsh-app/runtime.json ]; then
       fs.writeFileSync(p, JSON.stringify(j, null, 2) + "\n")
       console.log("added")
     }
-  ' "$UI_JSON" 2>/dev/null) || UI_RESULT=skip
+  ' "$UI_JSON" 2>/dev/null) || UI_RESULT=failed
   case "$UI_RESULT" in
     added) say "  ✔ 已写进 $UI_JSON（重启 App 后生效，其余隐藏项原样保留）" ;;
-    *)     say "  · 已经隐藏过了，跳过" ;;
+    skip)  say "  · 已经隐藏过了，跳过" ;;
+    # 写失败也报「已经隐藏过了」会让人以为没事：那颗胶囊还在，配置一个字没动。
+    *)     say "  ⚠ 写不进 $UI_JSON，隐藏没生效（那颗「插件」胶囊还会在）" ;;
   esac
   say ""
 fi
@@ -443,12 +465,17 @@ else
   # 与其让用户自己去敲命令核对，不如这里直接读一次 profile。
   # 读的是「本次装的 profile」，不是写死的 web：加了 --profile other 时读错目录，
   # 会把「装配失败但依赖已在 other 里」误判成「真没装上」，让用户白重装一遍。
+  # 只看 dependencies 不够：插件要真正被加载，还得在 dsh.profile.bundles 里。
+  # 只写了 dependencies 而 bundles 里没有时，重启 App 也不会装配它——
+  # 用户看到「装好了」，打开面板却什么都没有。两个都在才算装上了。
   DEP_LINE=$(DSH_PROFILE_CHECK="$PROFILE" node -e '
     try {
       const h = (process.env.DSH_HOME || process.env.HOME + "/.dsh")
       const j = require(h + "/profiles/" + process.env.DSH_PROFILE_CHECK + "/package.json")
       const v = j && j.dependencies && j.dependencies["dsh-go-purge"]
-      if (v) process.stdout.write(String(v))
+      const bundles = (j && j.dsh && j.dsh.profile && j.dsh.profile.bundles) || []
+      const listed = Array.isArray(bundles) && bundles.includes("dsh-go-purge")
+      if (v && listed) process.stdout.write(String(v))
     } catch {}
   ' 2>/dev/null) || DEP_LINE=""
   say ""

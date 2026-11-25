@@ -44,6 +44,12 @@ if (!n) {
 }
 
 const slot = sealBox(text)
-fs.writeFileSync(dest, JSON.stringify(slot, null, 2) + '\n')
+// 原子写：中途被杀留下半截 JSON，运行时就解不开、正文和分类整层变空，
+// 而且这种「静默变空」很难联想到是发布脚本写坏了
+{
+  const tmp = dest + '.tmp-' + process.pid
+  fs.writeFileSync(tmp, JSON.stringify(slot, null, 2) + '\n')
+  fs.renameSync(tmp, dest)
+}
 console.log('已封装 ' + n + ' 条分类 -> ' + path.relative(root, dest))
 console.log('体积：' + (fs.statSync(dest).size / 1024).toFixed(1) + ' KB')

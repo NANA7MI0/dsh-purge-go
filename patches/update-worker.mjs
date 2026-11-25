@@ -20,9 +20,31 @@ import { unpackScript, downloadArchive } from '../lib/unpack-repo.js'
 import { execFile } from 'node:child_process'
 
 const [home, repo, rootArg] = process.argv.slice(2)
-if (!home || !repo) {
-  console.error('usage: node update-worker.mjs <home> <repoDir> [engineRoot]')
+
+/**
+ * 退出前先把「我失败了」写进状态文件。
+ *
+ * 以前这里的参数校验直接 process.exit(2)，状态文件还停在启动方写的 'running'——
+ * 于是面板的「更新」按钮永远不出现（它只在 !isUpdating 时才显示），
+ * 用户会看到按钮一直是「重读」，点多少次都没用，重启 App 也没用。
+ */
+function bail(reason) {
+  try {
+    const dir = path.join(home || process.env.DSH_HOME || '', 'dsh-purge')
+    if (home) {
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(
+        path.join(dir, 'update-state.json'),
+        JSON.stringify({ status: 'failed', error: reason, at: new Date().toISOString() }),
+      )
+    }
+  } catch { /* 状态写不进也不能拦住退出 */ }
+  console.error(reason)
   process.exit(2)
+}
+
+if (!home || !repo) {
+  bail('用法不对：需要 <home> <repoDir> [engineRoot]' + (home ? '（缺仓库目录，可能不是 git 克隆装的）' : ''))
 }
 
 // engineRoot 允许不传：引擎侧 config.aiRoot 常常是空的（实测因此 worker 每次都以
@@ -39,8 +61,10 @@ if (!root) {
   }
 }
 if (!root) {
-  console.error('update-worker: 推断不出引擎目录，请在第三个参数里给')
-  process.exit(2)
+  // 走 bail：它会先把 status:'failed' 写进 update-state.json 再退出。
+  // 以前这里只 console.error + exit 2，状态文件还停在启动方写的 'running'，
+  // 面板的「更新」按钮要等 10 分钟超时才会回来。
+  bail('推断不出引擎目录（第三个参数没给，自动探测也失败）')
 }
 
 const REPO = 'NANA7MI0/dsh-purge-go'
@@ -58,7 +82,17 @@ function log(step, detail, extra) {
     const st = fs.statSync(logPath)
     if (st.size > LOG_MAX) {
       const buf = fs.readFileSync(logPath)
-      fs.writeFileSync(logPath, buf.subarray(Math.floor(buf.length / 2)))
+      // 按行砍，不按字节砍：日志的契约是「一行一条 JSON」，
+      // 从字节中点切开会让首行变成半截，整份日志不再能被逐行解析。
+      const lines = buf.toString('utf8').split('\n').filter(Boolean)
+      const keep = []
+      let bytes = 0
+      for (let i = lines.length - 1; i >= 0; i--) {
+        bytes += Buffer.byteLength(lines[i], 'utf8') + 1
+        if (bytes > buf.length / 2) break
+        keep.unshift(lines[i])
+      }
+      fs.writeFileSync(logPath, keep.length ? keep.join('\n') + '\n' : '')
     }
   } catch {
     /* 日志写不进不影响干活 */
@@ -69,8 +103,21 @@ function log(step, detail, extra) {
 function setState(patch) {
   try {
     fs.mkdirSync(path.dirname(statePath), { recursive: true })
-    const prev = fs.existsSync(statePath) ? JSON.parse(fs.readFileSync(statePath, 'utf8')) : {}
-    fs.writeFileSync(statePath, JSON.stringify({ ...prev, ...patch, at: new Date().toISOString() }))
+    // 解析失败当作「没有旧状态」继续写，不要放弃写。
+    // 以前 JSON.parse 抛错会被整个 catch 吞掉，此后每次 setState 都失败——
+    // 状态文件里永远是那段坏内容，面板既看不到「正在更新」也看不到失败原因，
+    // 而按钮因为读不到状态立刻变回可点，可能起第二个 worker。
+    let prev = {}
+    try {
+      const raw = fs.readFileSync(statePath, 'utf8')
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed === 'object') prev = parsed
+    } catch { prev = {} }
+    // 原子写：先写临时文件再 rename。直接 writeFileSync 被中断会留下半截 JSON，
+    // 而 readUpdateState 对半截 JSON 返回 null——面板会以为「从来没更新过」。
+    const tmp = statePath + '.tmp-' + process.pid
+    fs.writeFileSync(tmp, JSON.stringify({ ...prev, ...patch, at: new Date().toISOString() }))
+    fs.renameSync(tmp, statePath)
   } catch {
     /* 写不进就算了，日志里还有 */
   }
@@ -99,8 +146,20 @@ const readVersion = (dir) => {
 // kind 是给排障用的分类（old_node / download_failed / …），会写进 update-state.json 的 errorKind；
 // 界面只显示 reason，但用户来报问题时我们能一眼看出是哪一类。
 // 以前这个函数只收一个参数，调用处传的第二参数被默默丢掉，等于分类从来没生效过。
+// 归档兜底用的临时目录。放模块级是为了让 fail() 能清掉它——
+// 以前它只在 fallback 分支里局部定义，失败或被杀的路径都不会删，
+// 每更新失败一次就在 /tmp 留一份 600 KB 的归档 + 解包目录。
+let workTmp = ''
+
+const cleanupTmp = () => {
+  if (!workTmp) return
+  try { fs.rmSync(workTmp, { recursive: true, force: true }) } catch { /* 清不掉不影响结果 */ }
+  workTmp = ''
+}
+
 const fail = (reason, kind) => {
   log('fail', 'abort', { reason, kind: kind || '' })
+  cleanupTmp()
   setState({ status: 'failed', error: String(reason).slice(0, 160), errorKind: kind || '' })
   process.exit(1)
 }
@@ -125,6 +184,7 @@ if (!via) {
   const dirty = await run(repo, 'git', ['status', '--porcelain', '--untracked-files=no'], 15_000)
   if (dirty.out.trim()) fail('仓库有本地改动，先 commit 或 stash')
   const tmp = '/tmp/dshpurge-update-' + Date.now()
+  workTmp = tmp
   const tgz = tmp + '/repo.tgz'
   fs.mkdirSync(tmp, { recursive: true })
 
@@ -138,7 +198,12 @@ if (!via) {
     // node 太老归到 old_node：install.sh 认这个分类会提示升级 node，
     // 而不是笼统说「检查网络」——那种提示下用户永远修不好。
     if (/node 太老/.test(msg)) fail(msg + '。当前：' + process.version, 'old_node')
-    fail('下载仓库归档失败（' + msg.slice(0, 60) + '）。检查网络后重试。')
+    // 传 errorKind：install.sh 和面板按这个分类给不同建议，
+    // 不传的话它们只能看到空字符串，一律回「检查网络」——磁盘满、没权限也这么说。
+    const kind = /ENOSPC|EFBIG|no space/i.test(msg) ? 'disk_full'
+      : /EACCES|EPERM|EROFS/i.test(msg) ? 'no_permission'
+      : 'download_failed'
+    fail('下载仓库归档失败（' + msg.slice(0, 60) + '）。检查网络后重试。', kind)
   }
 
   // 解包+覆盖交给 lib/unpack-repo.js（内部调 patches/lib/replace-repo.sh）：
@@ -146,11 +211,14 @@ if (!via) {
   // 以前这段在 update-worker 和 dshgo.js 各有一份、还分叉过，现在收在一处。
   // 注意传的是 repo（插件仓库），不是引擎目录——
   // 传错会把整个插件仓库铺进 @deepseek-ai/，实测过一次，引擎目录被污染 12 项。
-  const script = unpackScript({ tgz, tmp, dest: repo })
+  // 传本地版本当底线：解出来的比它低就中止，不要覆盖成降级
+  const script = unpackScript({ tgz, tmp, dest: repo, minVersion: before })
   const fb = await run(repo, 'sh', ['-c', script], 120_000)
   log('fallback', fb.code === 0 ? 'ok' : 'failed', { code: fb.code, err: String(fb.err || '').slice(0, 120) })
   if (fb.code !== 0) fail('下载或覆盖失败：' + String(fb.err || fb.out || '').slice(0, 80))
   via = 'tarball'
+  // 成功也要清：解包目录里是整份仓库副本，留着只是占空间
+  cleanupTmp()
 }
 
 const after = readVersion(repo)
@@ -186,15 +254,26 @@ try {
 // 以前两处各写一遍、只有这里带 topUp，于是「点按钮能补备份、跑 install.sh 不能」，
 // 同一台机器两条路结果不同。
 // 不能复用上面 try 块里的 here（const 在块内），这里重算一次路径。
-const { runSettleSteps } = await import(
-  path.join(path.dirname(new URL(import.meta.url).pathname), 'lib', 'settle-steps.mjs'),
-)
-const { problems } = await runSettleSteps({
-  home, root, wasOn,
-  ops: mods.ops, sync: mods.sync, state: mods.state,
-  prepare: mods.prepare,   // 只有这条路径补备份：它跑在「拉完新代码、还没还原」的时刻
-  log,
-})
+// 这个 import 必须包 try：上面 mods 那段（218-221 行）就有 try，
+// 而这里没有。它一旦失败（文件缺失、新代码语法错、磁盘读不出来），
+// 异常直接抛出 worker，进程没了但状态还停在 running——
+// 面板的「更新」按钮要等 10 分钟超时才回来。
+let problems = []
+try {
+  const { runSettleSteps } = await import(
+    path.join(path.dirname(new URL(import.meta.url).pathname), 'lib', 'settle-steps.mjs'),
+  )
+  const res = await runSettleSteps({
+    home, root, wasOn,
+    ops: mods.ops, sync: mods.sync, state: mods.state,
+    prepare: mods.prepare,   // 只有这条路径补备份：它跑在「拉完新代码、还没还原」的时刻
+    log,
+  })
+  problems = Array.isArray(res?.problems) ? res.problems : []
+} catch (error) {
+  problems = ['收尾没跑起来：' + String(error?.message || error).slice(0, 60)]
+  log('settle', 'failed', { error: String(error?.message || error).slice(0, 120) })
+}
 
 setState({
   status: problems.length ? 'done-with-problems' : 'done',

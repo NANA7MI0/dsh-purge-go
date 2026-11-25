@@ -31,8 +31,17 @@ function log(step, detail, extra) {
     fs.appendFileSync(logPath, line)
     const st = fs.statSync(logPath)
     if (st.size > LOG_MAX) {
-      const buf = fs.readFileSync(logPath)
-      fs.writeFileSync(logPath, buf.subarray(Math.floor(buf.length / 2)))
+      // 按行砍，不按字节：日志的契约是「一行一条 JSON」，
+      // 从字节中点切开会让首行变成半截，之后整份日志都没法逐行解析。
+      const lines = fs.readFileSync(logPath, 'utf8').split('\n').filter(Boolean)
+      const keep = []
+      let bytes = 0
+      for (let i = lines.length - 1; i >= 0; i--) {
+        bytes += Buffer.byteLength(lines[i], 'utf8') + 1
+        if (bytes > LOG_MAX / 2) break
+        keep.unshift(lines[i])
+      }
+      fs.writeFileSync(logPath, keep.length ? keep.join('\n') + '\n' : '')
     }
   } catch {
     /* 写不进日志不能影响干活 */

@@ -152,20 +152,6 @@ export function isRegexEdit(e) {
 }
 
 /** 造一个带 g 标志的正则，用来数命中次数。 */
-function globalRegex(e) {
-  const flags = e.re.flags.includes("g") ? e.re.flags : e.re.flags + "g";
-  return new RegExp(e.re.source, flags);
-}
-
-/** 这条 edit 在文本里还剩几处没打。字符串走 split，正则走 match。 */
-export function countHits(e, text) {
-  if (isRegexEdit(e)) {
-    const m = text.match(globalRegex(e));
-    return m ? m.length : 0;
-  }
-  return text.split(e.pat).length - 1;
-}
-
 export function editsOf(p) {
   const out = [];
   if (Array.isArray(p.replacements)) {
@@ -239,7 +225,8 @@ export function probe(root, patches) {
     // 全都没了（包被删/文件被删）→ no_pkg，维持原有语义。
     // 但「一部分在、一部分没了」不能当 applied——那会让 existsSync 那层的 continue
     // 变成盲区：删掉的目标文件永远补不回来，短路还一直说正常。
-    const absentTargets = targets.filter((t) => t.absent === true).length;
+    // 不用单独统计 absentTargets：下面循环里 absent 的分支已经 fileMissing += 1 了，
+    // 再算一遍只是同一个数换个名字，改动时容易两处不同步。
     const edits = editsOf(p);
     const hitsRows = [];
     let fileMissing = 0;
@@ -278,13 +265,20 @@ export function probe(root, patches) {
     for (const r of hitsRows) if ((rank[r.status] ?? 0) > (rank[top.status] ?? 0)) top = r;
     // 「全部 applied」还要加上「目标一个都没缺」——否则删掉的目标文件会让这条补丁
     // 明明没打全却判 applied（existsSync 那层 continue 成了盲区）。
-    const anyMissing = fileMissing > 0 || absentTargets > 0;
+    const anyMissing = fileMissing > 0;
     const allApplied = hitsRows.every((r) => r.status === "applied");
     rows.push(Object.assign(
-      { id: p.id, name: p.name, status: allApplied && !anyMissing ? "applied" : top.status },
+      // 只留 id/name 这类基础字段；status 在下面那个对象里统一写一次。
+      // 以前这里也写了一次 status，两处表达式相同、后一个静默覆盖前一个——
+      // 眼下行为没差，但以后改一处就分叉了。
+      { id: p.id, name: p.name },
       top,
       {
-        status: allApplied && !anyMissing ? "applied" : top.status,
+        // 保持原来的状态判定：status 说的是「这条补丁的文本改到位了没有」，
+      // 「目标文件在不在」是另一件事，混进来会让面板显示 54/58（4 条明明改对了
+      // 却因为另有文件缺失被降级成 partial，看着像没打全）。
+      // 目标缺失交给 apply 的候选条件处理（见下面的 missingTargets 判断）。
+      status: allApplied && !anyMissing ? "applied" : top.status,
         // 缺了几个目标：面板算「是否全打上」时要看它，光看 status 不够
         missingTargets: fileMissing,
         targets: hitsRows.length,
@@ -318,7 +312,8 @@ export function restoreScript(root) {
     "  exit 1",
     "fi",
     'cd "$D/files"',
-    'find . -type f | while read -r f; do cp -f "$f" "$ROOT/$f"; done',
+    // -print0 + read -d ''：文件名带空格或换行时，按行读会拆错路径（把「a b.js」当成两个文件）
+    'find . -type f -print0 | while IFS= read -r -d "" f; do cp -f "$f" "$ROOT/$f"; done',
     'echo "restored into $ROOT"',
   ];
   return lines.join("\n") + "\n";
@@ -456,11 +451,34 @@ export function apply(root, opts = {}) {
   const logs = [];
   const errors = [];
   const byFile = new Map();
+  // 目标文件整个不见了的那几条：只记下来给上层报，不阻止其它补丁
+  const missingFiles = [];
   for (const r of rows) {
     // miss 也要进：它可能是「等另一条补丁先打出前提」的链式下游（88 依赖 87 产生的
     // dshPurgeNorm/dshPurgeHead）。当时判 miss，87 打完就该能接上。
     // 纳入是安全的——miss 的 pattern 本来就不在文件里，迭代时不会被误改。
-    if (r.status !== "hit" && r.status !== "partial" && r.status !== "miss") continue;
+    // drifted 也要进：它是「以前打过、被引擎升级冲掉」的状态，
+    // patchAdvice 明确告诉用户「重跑 apply 即可」，以前候选里却没有它，跑了输出 nothing to apply。
+    // 重复追加是安全的：isDone 会把已经改好的那些处跳过。
+    //
+    // applied 但 missingTargets > 0 也要进：文本改到位了、可有的目标文件不见了
+    // （用户手动清了某个包、或上游把文件挪走）。以前整条跳过，这条就永远显示已生效。
+    //
+    // 注意能力边界：apply 只能重打「文件还在」的那些目标。文件本身被删的，
+    // 要等「还原补丁」从备份里写回来——而且只有备份建立时那个文件还在，备份里才有它。
+    // 先删文件、再建备份，那份备份里就没有它，restore 也补不回来。
+    // 目标文件整个不见了（no_file）：这条补丁没有任何可改的地方。
+    // 必须在下面的 wanted 判断**之前**处理——no_file 不在 wanted 里，
+    // 放后面会被 continue 掉，于是什么都不记，用户点「一键注入」看到的是
+    // applied=0 + nothing to apply，完全不知道引擎缺文件。
+    if (r.status === "no_file") {
+      logs.push("skip " + r.id + " " + (r.name || "") + " :: 目标文件不存在（引擎可能被删过文件，重装引擎包可恢复）");
+      missingFiles.push({ id: r.id, name: r.name || "" });
+      continue;
+    }
+    const missing = Number(r.missingTargets) || 0
+    const wanted = r.status === "hit" || r.status === "partial" || r.status === "miss" || r.status === "drifted"
+    if (!wanted && !(r.status === "applied" && missing > 0)) continue;
     if (!r.files || !r.files.length) continue;
     const p = table.find((x) => x.id === r.id);
     // broken 标的是「已知打不上」的补丁（#3/#73/#77）。以前这个字段没人读，
@@ -494,8 +512,11 @@ export function apply(root, opts = {}) {
     logs.push("nothing to apply");
     // 字段要和正常路径一致：少了 rolledBack/rollbackFailed/rollbackMissed，
     // 任何用 if (!report.rolledBack) 判失败的新调用方都会被误导。
+    // missingFiles 也要带上：这条早返回正是「目标文件全不见了」时走到的分支，
+    // 不带的话调用方只看到 applied=0，不知道是「本来就打满了」还是「引擎缺文件」。
     return {
       backupDir: null, applied: 0, failed: 0, files: [], logs, errors,
+      missingFiles,
       rolledBack: false, rollbackFailed: false, rollbackMissed: [],
     };
   }
@@ -506,16 +527,56 @@ export function apply(root, opts = {}) {
   // 写进新版引擎里——版本对不上，轻则补丁失效，重则引擎起不来。
   // 复用已有备份时保留原来的 at：那个时间是「第一次打补丁之前」，还原靠它判断先后。
   // 重写 at 会让这份备份看起来像是刚建的，语义就丢了。
+  // 只要目标目录里已经有一份 manifest，就必须按「复用」处理，不能当新备份重写。
+  //
+  // 以前这个判断挂在 opts.keepManifestAt 上，而全仓唯一的调用方（lib/ops.js 的
+  // patchApplyCore）恒传 false、CLI 根本不传——于是 prevManifest 永远是 null，
+  // 下面「备份里已经有这个文件就跳过」的保护从来没生效过。
+  // 后果是实测出来的：第二次 apply 且 --backup 指向同一目录时，
+  // 47 个文件里有 33 个被「当前已打补丁的内容」覆盖，manifest 的 sha256 和 at 一起重写。
+  // 这份备份从此还原不出原始状态，而 restore 还报 restored=47 errors=0。
+  //
+  // 判据只能是「目录里有没有 manifest」：那是这份备份存在的唯一标志。
   let prevManifest = null
-  if (opts.keepManifestAt && !dry) {
+  if (!dry) {
     try { prevManifest = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8')) } catch { /* 没有就按新的写 */ }
   }
   // 复用分支只保留 at（「第一次打补丁之前」那个时间），engine 里的版本和 App 版本要按当前刷成新的。
   // 不刷的话：App 从 1.2.0 升到 1.2.1 → 备份里 engine.app 还是旧的（现在只警告不拒绝，
   // engine.app 仍是 1.2.0 → 再点还原还是被拒，永远出不来。
+  // 这份备份建下来的那一刻，引擎里原来还有哪些补丁是「已打上」的状态。
+  // 正常情况下应该是空数组——真出现非空，说明是在打过补丁的引擎上又建了备份，
+  // 这份备份存的就是「已打补丁」的内容，还原它等于没撤。选中它之前必须能看出来。
+  //
+  // 为什么记在 manifest 里、而不是还原时重新探一遍：备份目录里的文件是死副本，
+  // 拿它们跑 probe 跑不了（probe 要整个引擎包结构）。而 manifest 就放在备份目录里，
+  // 跟着备份一起被复制、移动、删除，判脏不需要额外状态。
+  // 判据必须和 lib/ops.js 的 enginePatched 一致：
+  //   · 只认 applied——partial 在完全干净的引擎上就有 26 条（补丁表写了多套引擎版本的写法，
+  //     本机只有其中一套），它不是「被打过」的信号；
+  //   · 排除 reverse——#2/#3 是「把文案改回官方说法」的补丁，原版引擎天然满足。
+  // 两处不一致的话，刚建好的干净备份会被自己的 manifest 判成脏。
+  const landedRows = rows.filter((r) => r.status === "applied" && r.reverse !== true)
+  const appliedIds = landedRows.map((r) => r.id)
+  const patchedFiles = [...new Set(
+    landedRows.flatMap((r) => (r.files || []).map((f) => path.relative(root, f))),
+  )]
   const manifest = prevManifest
-    ? { ...prevManifest, engine: { ...engineInfo(root), app: appVersion() }, files: prevManifest.files || [] }
-    : { root, at: new Date().toISOString(), engine: engineInfo(root), files: [] }
+    ? {
+        ...prevManifest,
+        engine: { ...engineInfo(root), app: appVersion() },
+        files: prevManifest.files || [],
+        appliedIds: appliedIds.length ? appliedIds : (prevManifest.appliedIds || []),
+        patchedFiles: patchedFiles.length ? patchedFiles : (prevManifest.patchedFiles || []),
+      }
+    : {
+        root,
+        at: new Date().toISOString(),
+        engine: engineInfo(root),
+        files: [],
+        appliedIds,
+        patchedFiles,
+      }
   // 备份覆盖所有补丁的候选文件，不只是这次动到的：还原用的是最早那份，
   // 它若只包含首次 apply 动到的文件，后来新增的目标就没东西可还原。
   const backupTargets = new Set(byFile.keys());
@@ -714,6 +775,9 @@ export function apply(root, opts = {}) {
     files,
     logs,
     errors,
+    // 目标文件整个不见了的补丁：调用方要把它们报出来，
+    // 否则「一键注入」在这种引擎上就是静默空转（applied=0、nothing to apply）
+    missingFiles,
     rolledBack,
     rollbackFailed, // true = 想回滚但没滚干净，调用方必须如实告知用户
     rollbackMissed,
@@ -814,7 +878,21 @@ export function restore(backupDir, opts = {}) {
 
 
   let n = 0;
+  // 引擎根的绝对路径，带分隔符——用来卡住「manifest 里的 rel 跑到引擎目录之外」。
+  // manifest 是磁盘上的普通 json，被改过或者手写错一个 ../，就能往任意位置写文件。
+  const rootAbs = path.resolve(root) + path.sep;
+  const insideRoot = (rel) => {
+    const abs = path.resolve(root, rel);
+    return abs === path.resolve(root) || abs.startsWith(rootAbs);
+  };
   const restoreOne = (rel) => {
+    if (!insideRoot(rel)) {
+      const msg = "备份里的路径指向引擎目录之外，已拒绝";
+      logs.push("FAIL " + rel + ": " + msg);
+      files.push({ rel, ok: false, error: msg });
+      errors.push({ rel, error: msg });
+      return;
+    }
     const from = path.join(src, rel);
     if (!fs.existsSync(from)) {
       const msg = "备份缺文件，无法还原";
@@ -837,9 +915,17 @@ export function restore(backupDir, opts = {}) {
           return;
         }
       }
-      fs.copyFileSync(from, path.join(root, rel));
+      // 原子写：先写同目录临时文件再 rename。
+      // 以前直接 copyFileSync 覆盖目标，中途失败（磁盘满、被杀）会留下半截文件——
+      // 后面的 restoreOne 继续写，引擎就停在「一半原始一半补丁」的混合态，
+      // 而且没有回滚（apply 有事务，restore 一直没做）。
+      const target = path.join(root, rel);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      const tmp = target + ".purge-restore-" + process.pid;
+      fs.copyFileSync(from, tmp);
+      fs.renameSync(tmp, target);
       if (expect) {
-        const actual = sha256(path.join(root, rel));
+        const actual = sha256(target);
         if (actual && actual !== expect) {
           const msg = "还原后哈希不符";
           logs.push("FAIL " + rel + ": " + msg);
@@ -861,11 +947,26 @@ export function restore(backupDir, opts = {}) {
 
   if (manifest && Array.isArray(manifest.files) && manifest.files.length) {
     // 按 manifest 逐个还原：manifest 说该有啥就必须有啥，缺了记错
+    // files/ 里多出来的文件只是「manifest 没登记的残留」（手工拷过、上次中断留下的），
+    // 它不影响还原质量——真正要拦的是「manifest 记了但文件不在」，那种才叫缺文件。
+    // 以前这里一律 push 进 errors，而上层把 errors.length>0 当失败，于是
+    // 「还原其实 100% 成功」也会被判失败，面板的 prerestore 还会因此中止打补丁。
     const actualCount = countFiles(src);
     if (manifest.files.length !== actualCount) {
-      errors.push({ error: `备份目录里有 ${actualCount} 个文件，manifest 记了 ${manifest.files.length} 个` });
+      logs.push(`备份目录里有 ${actualCount} 个文件，manifest 记了 ${manifest.files.length} 个（多出来的忽略）`);
     }
-    for (const f of manifest.files) restoreOne(f.rel);
+    // 老备份的 manifest.files 是字符串数组（新的是 {rel,size,sha256}）。
+    // 以前直接取 f.rel，字符串的 .rel 是 undefined，path.join 立刻抛 TypeError，
+    // 整个还原在第一个文件就崩了——而 missingBackupFiles / findReusableBackup 都兼容这两种格式，
+    // 说明老格式是真会遇到的。
+    for (const f of manifest.files) {
+      const rel = typeof f === "string" ? f : (f && f.rel);
+      if (!rel) {
+        errors.push({ error: "manifest 里有一条记录没有路径，已跳过" });
+        continue;
+      }
+      restoreOne(rel);
+    }
   } else {
     // 没有 manifest（老备份）：按目录树走，但明说「无完整性校验」
     logs.push("（该备份没有 manifest.json，无法做完整性校验）");
@@ -881,7 +982,16 @@ export function restore(backupDir, opts = {}) {
 
   logs.push("\nrestored " + n + " file(s)");
   for (const w of warnings) logs.push("WARN " + w);
-  return { restored: n, files, logs, errors, warnings, root, rootMismatch, hasManifest: Boolean(manifest), engineMismatch: false, backupVersion, currentVersion };
+  // 字段要和提前返回那几条一致：manifestBroken 那条带 appMismatch/backupApp/currentApp，
+  // 而这里原来缺这三样、engineMismatch 还硬编码 false。
+  // 调用方只能靠 warnings 猜版本对不对，猜错就把旧版引擎的文件写进新版里。
+  return {
+    restored: n, files, logs, errors, warnings, root, rootMismatch,
+    hasManifest: Boolean(manifest),
+    engineMismatch: Boolean(engineMismatch),
+    appMismatch: Boolean(appMismatch),
+    backupVersion, currentVersion, backupApp, currentApp,
+  };
 }
 
 /** 数一个目录下有多少个文件（用于对照 manifest）。 */

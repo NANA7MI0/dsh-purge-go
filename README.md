@@ -483,7 +483,7 @@ ls ~/.dsh/dsh-go/plugins/ 2>/dev/null    # 没有 dsh-go-purge 就算干净
 | 部分 | 作者 |
 |---|---|
 | `lib/` | [LanJinGod/dsh-purge-go](https://github.com/LanJinGod/dsh-purge-go)，直接引用，本仓库只做 dsh-go 侧路径适配 |
-| `assets/categories.json`（题材分类扩展层） | 同上；本仓库加了 4 条扩展分类，和正文一样封在 `lib/categories-table.json` 里 |
+| 题材分类扩展层 | 同上；本仓库加了 4 条扩展分类。源文件 `assets/categories.json` 不进 git，运行时读的是 `lib/categories-table.json`（和正文一样封过） |
 | `lib/asset-table.json`（正文加密副本） | 同上的正文，本仓库加了题材分类扩展的 4 行标记后重新打包 |
 | `patches/patches.json` | dsh-purge 社区维护版作者 小杨 / YuJunZhiXue（数据导出自 [kingcharleslzy-ai/dsh-purge](https://github.com/kingcharleslzy-ai/dsh-purge) v1.6.93，MIT） |
 | `patches/purge-patch.mjs`、README、包名映射 | 本仓库 |

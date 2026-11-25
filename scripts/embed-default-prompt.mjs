@@ -26,6 +26,12 @@ if (!text.trim()) {
 }
 
 const packed = sealBox(text)
-fs.writeFileSync(dest, JSON.stringify(packed, null, 2) + String.fromCharCode(10), 'utf8')
+// 原子写：中途被杀留下半截 JSON，运行时就解不开（见 lib/table-read.js 的告警），
+// 而这种「写了一半」最难查
+{
+  const tmp = dest + '.tmp-' + process.pid
+  fs.writeFileSync(tmp, JSON.stringify(packed, null, 2) + String.fromCharCode(10), 'utf8')
+  fs.renameSync(tmp, dest)
+}
 const bytes = fs.statSync(dest).size
 process.stdout.write('已打包 ' + path.relative(root, dest) + '：源 ' + text.length + ' 字符 → 产物 ' + bytes + ' 字节' + String.fromCharCode(10))

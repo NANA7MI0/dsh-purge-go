@@ -19,7 +19,9 @@ function fakeCtx(overrides = {}) {
       patchRevert: () => { calls.push('revert'); return { ok: true, restored: 47 } },
       patchApply: () => { calls.push('apply'); return { ok: true, applied: 60 } },
     },
-    sync: { syncNative: () => { calls.push('sync'); return { copied: 12 } } },
+    // ok:true 是必须的：syncNative 失败时不抛而是返回 { ok:false, skipped }，
+    // settle-steps 现在会检查它，不再把「11 项全跳过」记成成功
+    sync: { syncNative: () => { calls.push('sync'); return { ok: true, copied: 12 } } },
     state: { setEnabled: (_h, on) => { calls.push(on ? 'inject-on' : 'inject-off') } },
     log: () => {},
     calls,

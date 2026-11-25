@@ -73,7 +73,7 @@ git clone https://github.com/NANA7MI0/dsh-purge-go ~/dsh-purge-go && cd ~/dsh-pu
 
 **放家目录下的任何位置都行**：`~/dsh-purge-go`、`~/tools/dsh-purge-go`、`~/src/dsh-purge-go`。推荐放在重启后还在的地方，因为它是你以后 `git pull` 更新的源头——仓库没了，插件还能跑，但只能停在当前版本。
 
-> **原生界面目录是一份副本，不是快捷方式。** 装的时候把仓库里那 11 项复制进去（共约 1.1 MB），之后仓库被删、被移走、被 git 操作搞乱，这个目录都完整，App 照常启动。
+> **原生界面目录是一份副本，不是快捷方式。** 装的时候把仓库里那 10 项复制进去（共约 1.1 MB），之后仓库被删、被移走、被 git 操作搞乱，这个目录都完整，App 照常启动。
 > **代价**：git pull 之后要再同步一次——点面板上的「更新」会自动做（拉代码 → 还原补丁 → 重打补丁 → 同步副本，一次做完）。
 >
 > **已经中招的机器**（App 反复报 start failed: .../dsh-go/plugins/dsh-go-purge/LICENSE）：在终端里跑 sh install.sh --repair-native，只重建那个目录，别的一概不动。
@@ -184,16 +184,24 @@ cd ~/dsh-purge-go && sh install.sh
 # 第一步：打补丁（补丁层）—— 不做这步，破甲只生效一半
 cd ~/dsh-purge-go
 node patches/purge-patch.mjs probe   # 先看哪些能打
-node patches/purge-patch.mjs apply   # 真打
+# --backup 必须给：不给的话备份会落在「当前目录/backup-<时间>」，
+# 而插件的「还原补丁」只扫 ~/.dsh/dsh-purge/patch-backup，
+# 到时候点还原会说「找不到备份」，等于白打。
+node patches/purge-patch.mjs apply --backup "$HOME/.dsh/dsh-purge/patch-backup/manual-$(date +%s)"
 
 # 第二步：建原生界面目录（只有手机端要，胶囊/状态条/面板靠它）
 N=~/.dsh/dsh-go/plugins/dsh-go-purge
 NEW="$N.tmp.$$"
 rm -rf "$NEW" && mkdir -p "$NEW"
-for f in LICENSE NOTICE README.md CHANGELOG.md assets cordis.patch.yml docs install.sh lib patches package.json; do
+for f in LICENSE NOTICE README.md CHANGELOG.md cordis.patch.yml docs install.sh lib patches package.json; do
   [ -e ~/dsh-purge-go/$f ] && cp -R ~/dsh-purge-go/$f "$NEW/$f"
 done
-rm -rf "$N" && mv "$NEW" "$N"   # 全建好再整体替换，中途失败不会留下残缺目录
+# 全建好再整体替换。顺序和 install.sh 一致：先把旧的挪开、再把新的挪到位、最后删旧的。
+# 不能写成 rm -rf "$N" && mv "$NEW" "$N"——rm 和 mv 之间被杀，$N 就没了，
+# App 启动时读不到那个目录里的文件，会把整个 runtime 拉黑、侧边栏全灰。
+[ -e "$N" ] && mv "$N" "$N.old.$$"
+mv "$NEW" "$N"
+rm -rf "$N.old.$$"
 
 # 第三步（可选）：藏掉 App 自带的「插件」胶囊
 # 装完输入框上方会有两颗：破甲的「破甲状态」，和 App 自带的「插件」入口。
@@ -221,10 +229,15 @@ dsh plugin --profile web add ~/dsh-purge-go
 N=~/.dsh/dsh-go/plugins/dsh-go-purge
 NEW="$N.tmp.$$"
 rm -rf "$NEW" && mkdir -p "$NEW"
-for f in LICENSE NOTICE README.md CHANGELOG.md assets cordis.patch.yml docs install.sh lib patches package.json; do
+for f in LICENSE NOTICE README.md CHANGELOG.md cordis.patch.yml docs install.sh lib patches package.json; do
   [ -e ~/dsh-purge-go/$f ] && cp -R ~/dsh-purge-go/$f "$NEW/$f"
 done
-rm -rf "$N" && mv "$NEW" "$N"   # 全建好再整体替换，中途失败不会留下残缺目录
+# 全建好再整体替换。顺序和 install.sh 一致：先把旧的挪开、再把新的挪到位、最后删旧的。
+# 不能写成 rm -rf "$N" && mv "$NEW" "$N"——rm 和 mv 之间被杀，$N 就没了，
+# App 启动时读不到那个目录里的文件，会把整个 runtime 拉黑、侧边栏全灰。
+[ -e "$N" ] && mv "$N" "$N.old.$$"
+mv "$NEW" "$N"
+rm -rf "$N.old.$$"
 ```
 
 **只有手机端要这一步。** 那一层不在 profile 里，是 app 自己去 `~/.dsh/dsh-go/plugins/` 扫出来画胶囊和面板的，`dsh plugin add` 管不到。**复制一份完整副本**进去——不是软链，理由见 [README 的安装一章](../README.md#1-安装)。
@@ -261,7 +274,7 @@ Error: tool call aborted
 node -p 'require(process.env.HOME+"/.dsh/profiles/web/package.json").dependencies["dsh-go-purge"]'
 
 # 2. 补丁打上了吗（看 applied 那一项）
-cd "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)" && node patches/purge-patch.mjs probe
+cd "$(readlink -f "${DSH_HOME:-$HOME/.dsh}"/profiles/web/node_modules/dsh-go-purge)" && node patches/purge-patch.mjs probe
 ```
 
 两条都符合，直接重启引擎即可。
@@ -281,7 +294,7 @@ app 读到的还是老清单，于是胶囊点开没有面板、或者面板报�
 > App 整个起不来、只能用外部工具救。现在是一份副本，安全优先。
 
 ```sh
-cd "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)" && git pull && sh install.sh
+cd "$(readlink -f "${DSH_HOME:-$HOME/.dsh}"/profiles/web/node_modules/dsh-go-purge)" && git pull && sh install.sh
 # 然后从最近任务里把 App 划掉再打开
 ```
 

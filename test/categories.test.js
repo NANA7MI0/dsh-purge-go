@@ -128,17 +128,34 @@ test('applyCategories：没有标记时文末补一块，且带标记', () => {
   assert.match(out, /27\. Incest/)
 })
 
-test('seedInject：落盘的正文里已经带 26-28 与扩展意图行', () => {
+test('seedInject：落盘的是主正文，不含分类块；分类在组装时才拼', () => {
   const home = tempHome()
   const seeded = seedInject(home)
   const text = fs.readFileSync(seeded.path, 'utf8')
-  assert.ok(hasMarkers(text))
+  // 种子只写主正文：分类块是「组装时按开关决定拼不拼」的东西，
+  // 写进文件就变成正文的一部分，之后 categories:false 关不掉、手删也会被加回来
+  assert.ok(hasMarkers(text), '主正文自带一对空的标记占位，这是正常的')
+  assert.doesNotMatch(text, /^26\. \S+/m, '种子文件里不该已经渲染出分类规则')
+  // 意图行不能靠形状判：主正文本身就有十几行同样的形状（那是它自己的意图映射），
+  // 只能看「标记区里有没有东西」——扩展行只会落在 purge:intent 标记对之间
+  const between = (s, a, b) => {
+    const i = s.indexOf(a)
+    const j = s.indexOf(b)
+    return i >= 0 && j > i ? s.slice(i + a.length, j).trim() : null
+  }
+  assert.equal(
+    between(text, '<!-- purge:intent:begin -->', '<!-- purge:intent:end -->'),
+    '',
+    '种子文件的意图标记区应该是空的',
+  )
+
+  // 组装一遍，这时候分类才出现
+  const on = resolveInject(home, { state: {} })
+  assert.ok(hasMarkers(on.text))
   // 只验「26 号那条被渲染进去了」，不写它的标题内容——那是规则正文，仓库里不该出现
-  assert.match(text, /^26\. \S+/m)
-  assert.match(text, /^28\. \S+/m)
-  // 意图映射扩展行：只验形状（「- 别名 / 别名 … → 目标」），不点名具体别名
-  assert.match(text, /^- \S+ \/ .+ → /m)
-  assert.match(text, /29\. Adult \/ explicit tone/)
+  assert.match(on.text, /^26\. \S+/m)
+  assert.match(on.text, /^28\. \S+/m)
+  assert.match(on.text, /^- \S+ \/ .+ → /m)
 
   // 扩展块必须落在 Scoped Rules 区，而不是正文最末
   assert.ok(text.search(/^28\. /m) < text.indexOf('Sandbox test directions'))
