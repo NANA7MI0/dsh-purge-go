@@ -25,6 +25,7 @@
 | `/purge apply [force]` | 开启并确保正文存在 |
 | `/purge revert` | 关闭并把正文备份到 `dsh-purge/backups/` |
 | `/purge seed [force]` | 重写包内默认正文到 `prompt-inject.md` |
+| `/purge scrub show` / `on` / `off` | 历史清洗开关：关掉后历史里的旧回复不再改写作废。详见 [历史清洗](history-scrub.md) |
 | `/purge prompt show` | 看正文前 1200 字 |
 | `/purge prompt set <文件>` | 用文件的全文替换正文（比如 `/purge prompt set /sdcard/x.md`） |
 | `/purge prompt reset` | 恢复包内默认正文 |
