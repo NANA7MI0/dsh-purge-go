@@ -38,6 +38,7 @@ README 现在只有 9 章，从「安装」一路读到「来源」即可。下�
 | [restore.md](restore.md) | 还原引擎的完整命令：有备份走 restore、没备份从 npm 重装、逐字节验证 |
 | [troubleshooting.md](troubleshooting.md) | 已知限制、App 起不来的三种救法、App 更新后重打补丁、报障模板 |
 | [redteam.md](redteam.md) | 配套红队插件（独立 bundle）的装法、验证与已知上游 bug |
+| [history-scrub.md](history-scrub.md) | 历史清洗（补丁层第 87 条）：判断有多严、什么时候不生效、怎么关、怎么确认在跑 |
 
 ## 文件结构
 
@@ -75,7 +76,7 @@ CHANGELOG.md      更新日志（每个版本改了什么）
 .gitignore        排除 backup-*/ 、patch-probe.json 这类运行时产物
 ```
 
-合计 **75 个文件、约 1.2 MB**（`git ls-files` 全量，含 `docs/` 下 3 张截图与 8 份说明；体积会随版本小幅变化）。
+合计 **78 个文件、约 1.2 MB**（`git ls-files` 全量，含 `docs/` 下 3 张截图与 9 份说明；体积会随版本小幅变化）。
 
 **运行时才会出现的（不进 git，`ls` 能看到别以为多了）：**
 
