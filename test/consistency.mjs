@@ -10,6 +10,8 @@ import { patchAdvice, registerTools } from '../lib/tools.js'
 import { buildView, collect } from '../lib/dshgo.js'
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..')
+// 补丁表本身：查「多变补丁能不能命中」要用到变体数量
+const PATCHES = JSON.parse(fs.readFileSync(path.join(ROOT, 'patches', 'patches.json'), 'utf8'))
 const ENGINE = process.env.DSH_AI_ROOT || '/opt/dsh/node_modules/@deepseek-ai'
 const hasEngine = fs.existsSync(ENGINE)
 if (!hasEngine) console.log('\n⚠ 找不到引擎包（' + ENGINE + '），跳过依赖它的数字核对；其余项照查。')
@@ -88,6 +90,37 @@ if (!hasEngine) { console.log('    跳过：没有引擎包') } else {
     }
   }
   pass('文档数字与实测对照完成')
+}
+
+console.log('\n【3.4】有变体的补丁至少能命中一个')
+if (!hasEngine) { console.log('    跳过：没有引擎包') } else {
+  // 0.7.4 的 SCRUB_HISTORY 只认一种 return 写法，另一些 dsh-go 版本会把那一行包成
+  // dshGoRecall.tagHistory(...)，于是 probe 判 miss、面板一直挂「1 条待处理」、
+  // 点一键注入也消不掉。加变体能解决，但下次再写新补丁还会踩同一个坑——
+  // 所以这里加一条硬检查：凡是给了多个变体的补丁，不能一个都命中不了。
+  const rows = probe(ENGINE)
+  const byName = new Map(rows.map((r) => [r.name, r]))
+  const multi = PATCHES.filter((p) => Array.isArray(p.replacements) && p.replacements.length > 1)
+  if (!multi.length) {
+    console.log('    跳过：没有多变的补丁')
+  } else {
+    let bad = 0
+    for (const p of multi) {
+      const row = byName.get(p.name)
+      if (!row) continue
+      // miss = 所有 pattern 都不在文件里、且没有我们的标记 —— 说明一个变体都对不上
+      if (row.status === 'miss' || row.status === 'no_needle') {
+        bad += 1
+        fail(p.name + '（#' + p.id + '）有 ' + p.replacements.length + ' 个变体，但一个都命中不了：' + row.status)
+      }
+      // 状态是 partial 时，hits 必须小于变体数（否则说明全没打上却判成 partial）
+      if (row.status === 'partial' && row.hits === p.replacements.length) {
+        bad += 1
+        fail(p.name + '（#' + p.id + '）判 partial 但 ' + row.hits + '/' + row.total + ' 全未命中，应按 miss 处理')
+      }
+    }
+    if (!bad) pass(multi.length + ' 条多变补丁都至少能命中一个变体')
+  }
 }
 
 console.log('\n【3.5】面板与工具卡同一套口径')
