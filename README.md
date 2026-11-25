@@ -71,9 +71,9 @@ root@localhost:~/workspace#
 
 #### 第二步：粘命令、回车
 
-要粘两条命令，一条装、一条重启。每条都是完整的一行，直接复制整行、粘进终端、按回车。
+只用粘一条命令安装、最后手动重启。安装命令是完整的一行，直接复制整行、粘进终端、按回车。
 
-**第 1 条：安装**
+**第 1 步：安装**
 
 ```sh
 git clone https://github.com/NANA7MI0/dsh-purge-go ~/dsh-purge-go && cd ~/dsh-purge-go && sh install.sh
@@ -94,7 +94,7 @@ git clone https://github.com/NANA7MI0/dsh-purge-go ~/dsh-purge-go && cd ~/dsh-pu
 ▸ 最后一步：重启引擎让补丁生效
 ```
 
-**第 2 条：重启**
+**第 2 步：重启**
 
 补丁要重启引擎才生效。**不用敲命令，划掉 App 再打开就行：**
 
@@ -130,7 +130,7 @@ sh "$(readlink -f ~/.dsh/profiles/web/node_modules/dsh-go-purge)/patches/lib/upd
 
 **面板上点「重读」可以确认当前版本**，版本号就在顶部那句话里；装好之后同一条也可用来查还有没有新版。
 
-#### 连不上 GitHub 怎么办
+#### 手动安装，终端提示，连不上 GitHub 怎么办
 
 卡住不动、或报 `Failed to connect` / `Could not resolve host`：换成下面这条，它走 `codeload.github.com`——GitHub 的下载专用域名，有时比 `git clone` 通得快。
 
