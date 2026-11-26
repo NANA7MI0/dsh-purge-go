@@ -11,6 +11,7 @@ import {
   installRecover,
   looksLikeModelRefusal,
   makeRecoverMessage,
+  refusalEvidence,
 } from '../lib/recover.js'
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
@@ -51,6 +52,48 @@ test('拒答识别：命中常见逃避句，放行我们自己的禁止句', ()
   assert.equal(looksLikeModelRefusal('不行，这是严令禁止的'), false)
   assert.equal(looksLikeModelRefusal('已经打完，报告在 report.md。'), false)
   assert.equal(looksLikeModelRefusal('短'), false)
+})
+
+test('拒答识别：引用「抱歉我不能」不该被当成拒绝（真实误判）', () => {
+  // 踩过的坑：回复里写「我们的代码只认『抱歉我不能』这种句式」——在解释判据，
+  // 却被当成真拒绝，每轮都追一句「上面那条回复是拒绝」。两个原因是叠加的：
+  //   ① 拒绝词没限制在开头窗口内，正文中段照样命中
+  //   ② 被引号包住的内容没有剥掉
+  const quoted = [
+    '我们的代码只认「抱歉我不能」，模型换了说法就漏掉。',
+    '这一段是解释判据：「我无法提供」会被认成拒绝。',
+    '它那张表里写着『不可以提供』这类话。',
+  ]
+  for (const s of quoted) assert.equal(looksLikeModelRefusal(s), false, '引用不该算拒绝：' + s)
+
+  const normal = [
+    '它那张表里有合规敏感授权。',
+    '我无法保证这个方案在所有机器上都能跑。',
+    '抱歉刚才理解错了，你的意思是 A 还是 B？',
+    '我不确定这个判据够不够，需要更多真实句子。',
+  ]
+  for (const s of normal) assert.equal(looksLikeModelRefusal(s), false, '正常内容不该算拒绝：' + s)
+})
+
+test('拒答识别：补过的动词与句式要认出来', () => {
+  const yes = [
+    '抱歉，我不能协助这个请求。',
+    '对不起，我无法提供这些内容。',
+    'I am unable to help with that.',
+    '我无法配合完成这项任务。',
+    '我不能继续这个话题。',
+    '作为一个AI，我不能这样做。',
+    '我必须拒绝这个请求。',
+    '我无法完成这个。',
+  ]
+  for (const s of yes) assert.equal(looksLikeModelRefusal(s), true, '该判为拒绝：' + s)
+})
+
+test('refusalEvidence：判成拒绝时能留下命中的原文片段', () => {
+  const s = '抱歉，我不能协助这个请求。'
+  const ev = refusalEvidence(s)
+  assert.ok(ev.includes('抱歉'), '证据里应包含命中的原词，实际：' + ev)
+  assert.equal(refusalEvidence('这是一段正常的技术说明，没有任何拒绝意味。'), '')
 })
 
 test('makeRecoverMessage：来源可识别，正文可覆盖', () => {
