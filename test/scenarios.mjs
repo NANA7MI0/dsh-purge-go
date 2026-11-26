@@ -133,6 +133,13 @@ console.log('\n场景 1：补丁全打上的样子')
     s.buttonItems.length === 4 && ['重读', '一键注入', '开关注入'].every((n) => s.buttonItems.some((b) => b.label === n)),
     s.buttonItems.map((b) => b.label).join('/'))
   check('状态条不出现', s.alert === false && s.alertText === '', s.alertText)
+  // 补丁详情引导：只在分子等于分母（面板显示 N/N）时出现。
+  // 判据绑在显示的数字上，所以这里也拿数字验——两套条件迟早会打架。
+  check('全打上时给补丁详情引导',
+    typeof s.patchCaption === 'string'
+      && s.patchCaption.includes('已全应用')
+      && s.patchCaption.includes('purge_status'),
+    JSON.stringify(s.patchCaption))
   // 原来断言 s.tables === undefined 是恒真的——collect 压根不产这个键，
   // 等于什么都没验。真正该验的是「面板结构里没有表格节点、也没有 data.tables 绑定」。
   const view = buildView()
@@ -172,6 +179,8 @@ console.log('\n场景 3：引擎没打过补丁（刚装好 / App 更新冲掉�
   check('真实 applied 为 0（原版一条都没打）', realApplied === 0, 'applied=' + realApplied)
   check('状态条出现', s.alert === true)
   check('面板不写 N/N 全绿', s.patchText.split('/')[0] !== s.patchText.split('/')[1] || s.patchText === '未打', s.patchText)
+  // 补丁没打全时不能出现「已全应用」——那是整个功能唯一不能错的地方。
+  check('补丁异常时不给详情引导', s.patchCaption === '', JSON.stringify(s.patchCaption))
 }
 
 console.log('\n场景 4：备份脏了（里面带着补丁标记）')
