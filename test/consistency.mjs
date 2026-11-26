@@ -149,14 +149,28 @@ if (!hasEngine) { console.log('    跳过：没有引擎包') } else {
 console.log('\n【4】状态词与按钮文案')
 {
   const dshgo = read('lib/dshgo.js')
-  for (const s of ['破甲未工作 · 点开修复', '破甲已关 · 点开恢复', '破甲异常 · 点开处理']) {
-    if (!dshgo.includes(s)) fail('状态条缺一句：' + s)
+  // 从代码里抽全部状态条文案，不再硬编码。0.7.6 加了第四句「已更新待重启」，
+  // 原来硬编码的检查还写着「三句都在」、文档也还写「三句话」，两边一起错。
+  const inCode = [...dshgo.matchAll(/'([^'\n]*?\s·\s点开[^'\n]*?)'/g)].map((m) => m[1])
+  const codeSet = new Set(inCode)
+  if (!codeSet.size) fail('lib/dshgo.js 里一句状态条文案都没抽到（正则或代码结构变了）')
+  else pass('状态条共 ' + codeSet.size + ' 句：' + [...codeSet].join(' / '))
+
+  const docFiles = ['README.md', 'docs/tools.md', 'docs/troubleshooting.md']
+  const docAll = docFiles.map((f) => read(f)).join('\n')
+
+  // 代码 → 文档：每句都要在文档里出现（写全，或至少写了「 · 」前面的部分）
+  for (const text of codeSet) {
+    const head = text.split('·')[0].trim()
+    if (!docAll.includes(text) && !docAll.includes(head)) {
+      fail('状态条这句代码里有、文档里没写：' + text)
+    }
   }
-  pass('状态条三句都在')
-  for (const f of ['README.md', 'docs/tools.md']) {
-    const t = read(f)
-    for (const s of ['破甲未工作', '破甲已关', '破甲异常']) {
-      if (!t.includes(s)) console.log('    ⚠ ' + f + ' 没提状态条那句：' + s)
+  // 文档 → 代码：文档里写的每句，代码里必须有
+  for (const f of docFiles) {
+    // 只认同一行内的反引号片段：不限行的话会跨代码块匹配到整段内容
+    for (const m of read(f).matchAll(/`([^`\n]{4,30}·\s点开[^`\n]{2,12})`/g)) {
+      if (!codeSet.has(m[1].trim())) fail(f + ' 里写「' + m[1].trim() + '」，但 lib/dshgo.js 里没有这句')
     }
   }
 }
