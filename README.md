@@ -459,7 +459,7 @@ ls ~/.dsh/dsh-go/plugins/ 2>/dev/null    # 没有 dsh-go-purge 就算干净
 | Node | 20+（用到 `node --check` 和 ESM） |
 | **包管理器** | **pnpm**（`dsh plugin` 底层就是调 pnpm，缺了会报 `dsh: pnpm was not found`） |
 | 运行时依赖 | 零。插件本身只用 Node 内置模块 |
-| 体积 | 81 个文件 / 约 1.3 MB（含截图与文档；连 `.git` 一起克隆下来约 11 MB，其中 `.git` 占 8.3 MB） |
+| 体积 | 82 个文件 / 约 1.3 MB（含截图与文档；连 `.git` 一起克隆下来约 11 MB，其中 `.git` 占 8.3 MB） |
 
 **引擎版本适配表**（这张表同时决定「点一键注入」和「点还原」会不会被拦）：
 

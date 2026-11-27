@@ -60,8 +60,8 @@ patches/          patches.json（87 条）
   update-archive.sh     连不上 github.com 时的归档更新入口（下载 → 解包 → 调 replace-repo.sh → 跑 install.sh）
 scripts/          engine-smoke.mjs（段注册与 assemble 重排验证）· kit-check.mjs（插件规范检查，需外部 plugin-kit）
                   · embed-default-prompt.mjs（正文打包）· dump-prompt.sh（打印注入正文明文）
-test/             16 个文件，分三类：
-                    · 单元测试 12 个（*.test.js，node --test 跑）
+test/             17 个文件，分三类：
+                    · 单元测试 15 个（*.test.js，node --test 跑）
                     · 场景测试 scenarios.mjs（造真实故障状态，验用户看到的那句话对不对）
                     · 一致性检查 consistency.mjs（版本号 / 面板描述 / 补丁数字 / 状态词 /
                       工具名 / 文件结构 / README 锚点 / 跨文件锚点，逐项与代码对照。
@@ -76,7 +76,7 @@ CHANGELOG.md      更新日志（每个版本改了什么）
 .gitignore        排除 backup-*/ 、patch-probe.json 这类运行时产物
 ```
 
-合计 **80 个文件、约 1.2 MB**（`git ls-files` 全量，含 `docs/` 下 3 张截图与 10 份说明；体积会随版本小幅变化）。
+合计 **82 个文件、约 1.3 MB**（`git ls-files` 全量，含 `docs/` 下 3 张截图与 10 份说明；体积会随版本小幅变化）。
 
 **运行时才会出现的（不进 git，`ls` 能看到别以为多了）：**
 
